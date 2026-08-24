@@ -17,6 +17,7 @@ from app.api.middleware.request_id import RequestIdMiddleware
 from app.audio.vad import VoiceActivityDetector
 from app.config.settings import get_settings
 from app.config.logging_config import setup_logging
+from app.inference.chunkformer import ChunkFormerModel
 from app.inference.registry import ModelRegistry
 from app.inference.speech_encoder import SpeechEncoder
 from app.observability.logger import get_logger
@@ -40,6 +41,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Pre-loading Pretrained Speech Encoder (ECAPA-TDNN)...")
     encoder = SpeechEncoder(model_name=settings.speech_encoder_model_name)
     encoder.load()
+
+    # Pre-load ChunkFormer Baseline Model once at startup
+    logger.info("Pre-loading ChunkFormer Attribute Model...")
+    chunkformer = ChunkFormerModel()
+    chunkformer.load()
 
     # Warm up model registry — loads and caches all models
     registry = ModelRegistry(settings)

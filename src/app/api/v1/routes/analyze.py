@@ -1,17 +1,19 @@
-"""POST /analyze and POST /v1/analyze — audio ingestion, FFmpeg normalization, Silero VAD, Quality Assessment, ML Input Prep & Speech Encoder endpoint.
+"""POST /analyze and POST /v1/analyze — audio ingestion, FFmpeg normalization, Silero VAD, Quality Assessment, ML Input Prep, Speech Encoder, Gender & Age Classification endpoint.
 
 Accepts an audio file via multipart upload, validates input,
 decodes & normalizes to 16kHz mono float32 PCM using FFmpeg,
 runs Silero Voice Activity Detection (VAD) with segment refinement,
 assesses multi-signal audio quality, prepares deterministic model-ready ML input waveform window,
 extracts 192-dim speech embedding vector via SpeechBrain ECAPA-TDNN,
-and classifies audio quality with transparent reasoning.
+predicts gender classification (male, female, unknown),
+estimates age bracket classification (18-30, 31-45, 46-60, 60+, unknown),
+and returns normalized metadata with VAD, quality, gender, and age metrics.
 """
 
 import time
 from fastapi import APIRouter, File, UploadFile
 
-from app.api.v1.schemas.responses import AudioMetadataResponse, SpeechSegmentSchema
+from app.api.v1.schemas.responses import AgeBracketResponse, AudioMetadataResponse, GenderResponse, SpeechSegmentSchema
 from app.audio.codec import AudioCodec
 from app.audio.preprocessor import AudioPreprocessor
 from app.audio.quality import AudioQualityAssessor
@@ -19,6 +21,8 @@ from app.audio.validator import AudioValidator
 from app.audio.vad import VoiceActivityDetector
 from app.config.settings import get_settings
 from app.inference.speech_encoder import SpeechEncoder
+from app.inference.strategies.age_estimator import AgeEstimator
+from app.inference.strategies.gender_classifier import GenderClassifier
 from app.observability.logger import get_logger
 
 router = APIRouter()
@@ -28,20 +32,20 @@ logger = get_logger(__name__)
 @router.post(
     "/analyze",
     response_model=AudioMetadataResponse,
-    summary="Analyze, normalize, Silero VAD, quality assessment, ML input prep, and speech embedding extraction",
+    summary="Analyze, normalize, Silero VAD, quality assessment, ML input prep, speech embedding, gender & age estimation",
     description=(
         "Accepts an audio file via multipart upload, validates input constraints, "
         "decodes and normalizes the payload into 16 kHz, mono, PCM float32 waveform data via FFmpeg, "
         "runs Silero Voice Activity Detection (VAD) with segment refinement (gap merging & fragment filtering), "
         "evaluates multi-signal audio quality, prepares deterministic model-ready ML input waveform window, "
         "extracts fixed 192-dimensional speech embedding vector via SpeechBrain ECAPA-TDNN, "
-        "and classifies audio quality with transparent reasoning."
+        "predicts gender and age bracket classification with confidence thresholding, and classifies audio quality with transparent reasoning."
     ),
 )
 async def analyze_audio(
     file: UploadFile = File(..., description="Audio file (WAV, MP3, OGG, FLAC, M4A, etc.)"),
 ) -> AudioMetadataResponse:
-    """Ingest, validate, decode via FFmpeg, run Silero VAD, evaluate multi-signal quality, prepare ML input, extract speech embedding, and return metadata.
+    """Ingest, validate, decode via FFmpeg, run Silero VAD, evaluate quality, prepare ML input, extract embedding, predict gender & age, and return metadata.
 
     The audio payload is processed entirely in memory — no files touch disk.
     """
@@ -101,6 +105,22 @@ async def analyze_audio(
     speech_encoder = SpeechEncoder(model_name=settings.speech_encoder_model_name)
     embedding_res = speech_encoder.encode(prepared_input)
 
+    # 9. Gender Classification Inference Stage
+    gender_classifier = GenderClassifier(
+        model_name="gender_classifier",
+        device=settings.model_device,
+        confidence_threshold=settings.gender_confidence_threshold,
+    )
+    gender_res = gender_classifier.predict_embedding(embedding_res)
+
+    # 10. Age Bracket Estimation Inference Stage
+    age_estimator = AgeEstimator(
+        model_name="age_estimator",
+        device=settings.model_device,
+        confidence_threshold=settings.age_confidence_threshold,
+    )
+    age_res = age_estimator.predict_embedding(embedding_res)
+
     processing_ms = int((time.perf_counter() - t0) * 1000)
 
     logger.info(
@@ -111,9 +131,8 @@ async def analyze_audio(
         audio_quality=qual_res.audio_quality.value,
         snr_db=qual_res.snr_db,
         vad_confidence=vad_res.vad_confidence,
-        is_prepared_valid=prepared_input.is_prepared_valid,
-        embedding_is_valid=embedding_res.is_valid,
-        encoder_inference_ms=embedding_res.inference_ms,
+        gender_prediction=gender_res.prediction.value,
+        age_prediction=age_res.prediction.value,
         processing_ms=processing_ms,
     )
 
@@ -147,4 +166,16 @@ async def analyze_audio(
         rms_energy=qual_res.rms_energy,
         speech_energy_ratio=qual_res.speech_energy_ratio,
         quality_reasoning=qual_res.quality_reasoning,
+        gender=GenderResponse(
+            prediction=gender_res.prediction,
+            confidence=gender_res.confidence,
+            probabilities=gender_res.probabilities,
+            inference_ms=gender_res.inference_ms,
+        ),
+        age_bracket=AgeBracketResponse(
+            prediction=age_res.prediction,
+            confidence=age_res.confidence,
+            probabilities=age_res.probabilities,
+            inference_ms=age_res.inference_ms,
+        ),
     )

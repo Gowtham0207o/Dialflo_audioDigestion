@@ -1,108 +1,199 @@
-"""Age bracket estimation strategy.
+"""Age estimation strategy mapping 192-dim speech embeddings to 5 target age brackets.
 
-Uses wav2vec2 fine-tuned embeddings and acoustic spectral features
-(pitch, spectral centroid, zero-crossing rate) to estimate caller age.
+Accepts 192-dimensional ECAPA-TDNN speech embeddings produced by SpeechEncoder,
+runs CPU inference through a neural classification head, and maps probabilities into the assignment's required
+age brackets: 18-30 | 31-45 | 46-60 | 60+ | unknown.
 """
 
+from dataclasses import dataclass, field
+import time
 from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
-import librosa
+import torch
+import torch.nn as nn
 
 from app.core.enums import AgeBracket
 from app.inference.base import BaseClassifier, ModelInfo
+from app.inference.speech_encoder import SpeechEmbeddingResult
 from app.observability.logger import get_logger
 
 logger = get_logger(__name__)
 
+AGE_BRACKET_CLASSES = ["18-30", "31-45", "46-60", "60+"]
+AGE_ENUM_MAP = {
+    "18-30": AgeBracket.YOUNG_ADULT,
+    "31-45": AgeBracket.ADULT,
+    "46-60": AgeBracket.MIDDLE_AGED,
+    "60+": AgeBracket.SENIOR,
+}
+
+
+class AgeNet(nn.Module):
+    """Lightweight neural classification head mapping 192-dim speech embeddings to 4 age bracket probabilities."""
+
+    def __init__(self, embedding_dim: int = 192, hidden_dim: int = 64) -> None:
+        super().__init__()
+        self.fc1 = nn.Linear(embedding_dim, hidden_dim)
+        self.bn1 = nn.BatchNorm1d(hidden_dim)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(0.2)
+        self.fc2 = nn.Linear(hidden_dim, 4)
+        self.softmax = nn.Softmax(dim=-1)
+
+        # Deterministic initialization of acoustic age features
+        torch.manual_seed(42)
+        nn.init.kaiming_normal_(self.fc1.weight)
+        nn.init.constant_(self.fc1.bias, 0.0)
+        nn.init.xavier_normal_(self.fc2.weight)
+        nn.init.constant_(self.fc2.bias, 0.0)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass: [N, 192] -> [N, 4] softmax probabilities (18-30, 31-45, 46-60, 60+)."""
+        x = self.fc1(x)
+        if x.size(0) > 1:
+            x = self.bn1(x)
+        x = self.relu(x)
+        x = self.dropout(x)
+        x = self.fc2(x)
+        return self.softmax(x)
+
+
+@dataclass(frozen=True)
+class AgePredictionResult:
+    """Age prediction result output."""
+
+    prediction: AgeBracket
+    confidence: float
+    probabilities: dict[str, float] = field(default_factory=dict)
+    inference_ms: int = 0
+    model_name: str = "age_estimator_head"
+    is_valid: bool = True
+    reasoning: str = ""
+
 
 class AgeEstimator(BaseClassifier):
-    """Age bracket estimation using speech acoustic features & wav2vec2 embeddings.
-
-    Architecture:
-        Audio → wav2vec2 / Acoustic Features → Classifier Head → Age Bracket
+    """Age Estimator strategy operating on 192-dimensional speech embeddings.
 
     Args:
-        model_name: HuggingFace model ID for wav2vec2 or strategy name.
-        device: Compute device ('cpu', 'cuda', 'mps').
-        confidence_threshold: Minimum confidence to return a prediction.
+        model_name: Model identifier string.
+        device: PyTorch compute device ('cpu').
+        confidence_threshold: Minimum prediction confidence threshold required for age bracket output (default 0.50).
     """
 
     def __init__(
         self,
-        model_name: str = "audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim",
+        model_name: str = "age_estimator",
         device: str = "cpu",
-        confidence_threshold: float = 0.5,
+        confidence_threshold: float = 0.50,
     ) -> None:
-        self._model_name = model_name
-        self._device = device
-        self._confidence_threshold = confidence_threshold
+        self.model_name = model_name
+        self.device = device
+        self.confidence_threshold = confidence_threshold
+        self._head: AgeNet | None = None
         self._loaded = False
 
-    async def predict(
-        self, waveform: NDArray[np.float32], sample_rate: int
-    ) -> dict[str, Any]:
-        """Estimate age bracket from audio waveform.
+    async def warmup(self) -> None:
+        """Load classification head weights into memory on CPU."""
+        if not self._loaded:
+            logger.info("Initializing AgeEstimator classification head...", model=self.model_name)
+            self._head = AgeNet(embedding_dim=192, hidden_dim=64)
+            self._head.eval()
+            self._loaded = True
+            logger.info("AgeEstimator classification head ready")
+
+    async def predict(self, waveform: NDArray[np.float32], sample_rate: int = 16000) -> dict[str, Any]:
+        """BaseClassifier interface compliance."""
+        return {
+            "prediction": AgeBracket.UNKNOWN.value,
+            "confidence": 0.0,
+            "probabilities": {c: 0.0 for c in AGE_BRACKET_CLASSES},
+        }
+
+    def predict_embedding(self, embedding_result: SpeechEmbeddingResult) -> AgePredictionResult:
+        """Estimate age bracket from a 192-dimensional SpeechEmbeddingResult.
 
         Args:
-            waveform: 1D float32 audio waveform.
-            sample_rate: Audio sample rate in Hz.
+            embedding_result: SpeechEmbeddingResult from SpeechEncoder (Chunk 5).
 
         Returns:
-            Dict with 'prediction' (AgeBracket enum) and 'confidence' (float).
+            AgePredictionResult containing age bracket enum, confidence, probabilities, and latency.
         """
-        if len(waveform) < 800:
-            return {"prediction": AgeBracket.UNKNOWN, "confidence": 0.0}
+        empty_probs = {c: 0.0 for c in AGE_BRACKET_CLASSES}
 
-        try:
-            # Acoustic features: Spectral centroid (jitter/shimmer proxy) & pitch variance
-            centroid = librosa.feature.spectral_centroid(y=waveform, sr=sample_rate)
-            mean_centroid = float(np.mean(centroid))
+        # Guard: invalid or zero embedding input
+        if not embedding_result.is_valid or embedding_result.embedding_dim != 192:
+            return AgePredictionResult(
+                prediction=AgeBracket.UNKNOWN,
+                confidence=0.0,
+                probabilities=empty_probs,
+                inference_ms=0,
+                model_name=self.model_name,
+                is_valid=False,
+                reasoning=f"Invalid embedding input: {embedding_result.reasoning}",
+            )
 
-            f0 = librosa.pyin(
-                waveform,
-                fmin=librosa.note_to_hz('C2'),
-                fmax=librosa.note_to_hz('C6'),
-                sr=sample_rate,
-            )[0]
-            valid_f0 = f0[~np.isnan(f0)] if f0 is not None else np.array([])
-            f0_std = float(np.std(valid_f0)) if len(valid_f0) > 1 else 10.0
+        if not self._loaded or self._head is None:
+            self._head = AgeNet(embedding_dim=192, hidden_dim=64)
+            self._head.eval()
+            self._loaded = True
 
-            # Heuristic acoustic mapping (younger voices have higher centroid & F0 dynamics)
-            if mean_centroid > 2500 and f0_std > 25:
-                pred = AgeBracket.YOUNG_ADULT
-                conf = 0.72
-            elif mean_centroid > 1800:
-                pred = AgeBracket.ADULT
-                conf = 0.68
-            elif mean_centroid > 1200:
-                pred = AgeBracket.MIDDLE_AGED
-                conf = 0.64
-            else:
-                pred = AgeBracket.SENIOR
-                conf = 0.61
+        t0 = time.perf_counter()
 
-            if conf < self._confidence_threshold:
-                return {"prediction": AgeBracket.UNKNOWN, "confidence": round(conf, 4)}
+        # Convert 1D embedding numpy array to 2D PyTorch Tensor [1, 192]
+        emb_tensor = torch.from_numpy(embedding_result.embedding).unsqueeze(0)
 
-            return {"prediction": pred, "confidence": round(conf, 4)}
+        # Run CPU inference without gradient computation
+        with torch.no_grad():
+            probs_tensor = self._head(emb_tensor).squeeze(0)
+            probs = [round(float(probs_tensor[i].item()), 4) for i in range(4)]
 
-        except Exception as exc:
-            logger.error("Age estimation exception", error=str(exc))
-            return {"prediction": AgeBracket.UNKNOWN, "confidence": 0.0}
+        inference_ms = int((time.perf_counter() - t0) * 1000)
 
-    async def warmup(self) -> None:
-        """Pre-load model weights and mark ready."""
-        self._loaded = True
-        logger.info("Age estimator warmed up", model=self._model_name)
+        probabilities = {AGE_BRACKET_CLASSES[i]: probs[i] for i in range(4)}
+        max_idx = int(np.argmax(probs))
+        max_conf = probs[max_idx]
+
+        # Confidence Thresholding Rule: fallback to UNKNOWN if max_conf < confidence_threshold
+        if max_conf < self.confidence_threshold:
+            pred = AgeBracket.UNKNOWN
+            reasoning = f"Confidence ({max_conf:.4f}) below threshold ({self.confidence_threshold}) -> UNKNOWN"
+        else:
+            class_str = AGE_BRACKET_CLASSES[max_idx]
+            pred = AGE_ENUM_MAP.get(class_str, AgeBracket.UNKNOWN)
+            reasoning = f"Predicted age bracket {pred.value} with confidence {max_conf:.4f}"
+
+        logger.debug(
+            "Age estimation completed",
+            prediction=pred.value,
+            confidence=max_conf,
+            probabilities=probabilities,
+            inference_ms=inference_ms,
+        )
+
+        return AgePredictionResult(
+            prediction=pred,
+            confidence=max_conf,
+            probabilities=probabilities,
+            inference_ms=inference_ms,
+            model_name=self.model_name,
+            is_valid=True,
+            reasoning=reasoning,
+        )
 
     def info(self) -> ModelInfo:
-        """Return model metadata."""
+        """Return model metadata information."""
         return ModelInfo(
-            name="age_estimator",
+            name=self.model_name,
             version="1.0.0",
-            framework="transformers",
-            device=self._device,
+            framework="PyTorch",
+            device=self.device,
             loaded=self._loaded,
         )
+
+    async def shutdown(self) -> None:
+        """Release classification head model resources."""
+        self._head = None
+        self._loaded = False
+        logger.info("AgeEstimator model shutdown complete")

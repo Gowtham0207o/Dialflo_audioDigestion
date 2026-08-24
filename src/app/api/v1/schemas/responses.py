@@ -1,6 +1,7 @@
 """Response schemas matching API contracts.
 
-Defines Pydantic models for audio metadata response with Silero VAD & Multi-Signal Quality Metrics.
+Defines Pydantic models for audio metadata response with Silero VAD, Multi-Signal Quality Metrics,
+and Gender / Age prediction response objects.
 """
 
 from __future__ import annotations
@@ -19,8 +20,34 @@ class SpeechSegmentSchema(BaseModel):
     confidence: float = Field(default=1.0, description="Segment VAD confidence [0.0, 1.0]")
 
 
+class GenderResponse(BaseModel):
+    """Gender prediction response object."""
+
+    prediction: Gender = Field(..., description="Predicted gender (male, female, unknown)")
+    confidence: float = Field(
+        ..., ge=0.0, le=1.0, description="Confidence score [0.0, 1.0]"
+    )
+    probabilities: dict[str, float] = Field(
+        default_factory=dict, description="Raw class probabilities for male and female"
+    )
+    inference_ms: int = Field(default=0, description="Gender classification head inference time in milliseconds")
+
+
+class AgeBracketResponse(BaseModel):
+    """Age bracket prediction response object."""
+
+    prediction: AgeBracket = Field(..., description="Predicted age bracket (18-30, 31-45, 46-60, 60+, unknown)")
+    confidence: float = Field(
+        ..., ge=0.0, le=1.0, description="Confidence score [0.0, 1.0]"
+    )
+    probabilities: dict[str, float] = Field(
+        default_factory=dict, description="Raw class probabilities for age brackets (18-30, 31-45, 46-60, 60+)"
+    )
+    inference_ms: int = Field(default=0, description="Age estimation head inference time in milliseconds")
+
+
 class AudioMetadataResponse(BaseModel):
-    """Audio metadata returned after FFmpeg normalization, Silero VAD, and Multi-Signal Quality Assessment."""
+    """Audio metadata returned after FFmpeg normalization, Silero VAD, Multi-Signal Quality Assessment, Gender & Age Classification."""
 
     duration: float = Field(..., description="Duration in seconds")
     duration_ms: int = Field(..., description="Duration in milliseconds")
@@ -59,23 +86,9 @@ class AudioMetadataResponse(BaseModel):
         description="Human-readable reasons for the audio_quality classification",
     )
 
-
-class GenderResponse(BaseModel):
-    """Gender prediction response object."""
-
-    prediction: Gender = Field(..., description="Predicted gender")
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Confidence score [0.0, 1.0]"
-    )
-
-
-class AgeBracketResponse(BaseModel):
-    """Age bracket prediction response object."""
-
-    prediction: AgeBracket = Field(..., description="Predicted age bracket")
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Confidence score [0.0, 1.0]"
-    )
+    # ── ML Attribute Predictions ─────────────────
+    gender: GenderResponse | None = Field(default=None, description="Gender classification prediction response")
+    age_bracket: AgeBracketResponse | None = Field(default=None, description="Age bracket estimation prediction response")
 
 
 class AnalyzeResponse(BaseModel):
