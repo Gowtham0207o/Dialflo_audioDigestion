@@ -1,7 +1,7 @@
-"""Response schemas matching the expected API contract.
+"""Response schemas matching API contracts.
 
-These Pydantic models define the exact JSON structure returned by
-the API, including the nested gender/age prediction objects.
+Defines Pydantic models for audio metadata response with VAD & quality metrics (Chunk 1-3)
+and full attribute response schemas.
 """
 
 from __future__ import annotations
@@ -10,6 +10,49 @@ from pydantic import BaseModel, Field
 
 from app.core.enums import AgeBracket, AudioQuality, Gender
 from app.domain.analysis_result import AnalysisResult
+
+
+class SpeechSegmentSchema(BaseModel):
+    """Timestamped speech segment interval."""
+
+    start_seconds: float = Field(..., description="Start timestamp in seconds")
+    end_seconds: float = Field(..., description="End timestamp in seconds")
+
+
+class AudioMetadataResponse(BaseModel):
+    """Audio metadata returned after FFmpeg normalization, VAD, and Quality Assessment (Chunks 1-3)."""
+
+    duration: float = Field(..., description="Duration in seconds")
+    duration_ms: int = Field(..., description="Duration in milliseconds")
+    duration_seconds: float = Field(..., description="Duration in seconds")
+    sample_rate: int = Field(default=16000, description="Sample rate in Hz (16000)")
+    channels: int = Field(default=1, description="Audio channels (1 = mono)")
+    samples: int = Field(..., description="Total PCM float32 samples")
+    total_samples: int = Field(..., description="Total PCM float32 samples")
+    original_format: str = Field(..., description="Detected original format (e.g. wav, mp3, ogg)")
+    processing_ms: int = Field(..., description="End-to-end processing time in milliseconds")
+
+    # ── Chunk 2: VAD Metrics ─────────────────
+    speech_duration_seconds: float = Field(..., description="Total speech duration in seconds")
+    speech_duration_ms: int = Field(..., description="Total speech duration in milliseconds")
+    speech_ratio: float = Field(..., description="Ratio of speech duration to total audio duration [0.0, 1.0]")
+    speech_segments: list[SpeechSegmentSchema] = Field(
+        default_factory=list,
+        description="Timestamped speech intervals for debugging",
+    )
+    is_speech_sufficient: bool = Field(
+        ..., description="True if speech ratio and duration exceed minimum thresholds"
+    )
+
+    # ── Chunk 3: Quality Assessment Metrics ──
+    audio_quality: AudioQuality = Field(..., description="Audio quality classification flag (good, degraded, insufficient)")
+    snr_db: float = Field(..., description="Estimated Signal-to-Noise Ratio in dB")
+    peak_amplitude: float = Field(..., description="Peak amplitude of the audio waveform [0.0, 1.0]")
+    clipping_ratio: float = Field(..., description="Ratio of clipped samples (amplitude >= 0.99)")
+    quality_reasoning: list[str] = Field(
+        default_factory=list,
+        description="Human-readable reasons for the audio_quality classification",
+    )
 
 
 class GenderResponse(BaseModel):
@@ -31,23 +74,14 @@ class AgeBracketResponse(BaseModel):
 
 
 class AnalyzeResponse(BaseModel):
-    """Full analysis response — matches the expected API contract.
-
-    Example:
-        {
-            "contact_id": "uuid",
-            "gender": {"prediction": "male", "confidence": 0.87},
-            "age_bracket": {"prediction": "31-45", "confidence": 0.63},
-            "processing_ms": 142,
-            "audio_quality": "good"
-        }
-    """
+    """Full analysis response schema."""
 
     contact_id: str = Field(..., description="Unique request identifier")
     gender: GenderResponse
     age_bracket: AgeBracketResponse
     processing_ms: int = Field(..., description="Processing time in milliseconds")
     audio_quality: AudioQuality = Field(..., description="Audio quality assessment")
+    metadata: AudioMetadataResponse | None = Field(default=None, description="Normalized audio metadata")
 
     @classmethod
     def from_domain(cls, result: AnalysisResult) -> AnalyzeResponse:
@@ -66,25 +100,9 @@ class AnalyzeResponse(BaseModel):
             audio_quality=result.audio_quality,
         )
 
-    model_config = {"json_schema_extra": {
-        "examples": [
-            {
-                "contact_id": "550e8400-e29b-41d4-a716-446655440000",
-                "gender": {"prediction": "male", "confidence": 0.87},
-                "age_bracket": {"prediction": "31-45", "confidence": 0.63},
-                "processing_ms": 142,
-                "audio_quality": "good",
-            }
-        ]
-    }}
-
 
 class StreamEvent(BaseModel):
-    """Progressive prediction event emitted over WebSocket.
-
-    Sent after each audio chunk is processed. Confidence scores
-    may improve as more audio data is received.
-    """
+    """Progressive prediction event emitted over WebSocket."""
 
     chunk_index: int = Field(..., description="Index of the processed chunk")
     is_final: bool = Field(default=False, description="Whether this is the final event")

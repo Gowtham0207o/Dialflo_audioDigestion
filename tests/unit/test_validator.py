@@ -1,22 +1,38 @@
-"""Unit tests for audio input validation."""
+"""Unit tests for AudioValidator (Chunk 1)."""
 
 import pytest
-
 from app.audio.validator import AudioValidator
-from app.core.exceptions import AudioValidationError, AudioTooShortError, AudioTooLongError
+from app.core.exceptions import AudioValidationError, AudioDigestionError
 
 
-class TestAudioValidator:
-    """Tests for AudioValidator."""
+def test_validate_content_type_valid():
+    AudioValidator.validate_content_type("audio/wav")
+    AudioValidator.validate_content_type("audio/mpeg")
+    AudioValidator.validate_content_type("application/octet-stream")
 
-    # TODO: Implement tests for:
-    # - validate_content_type() with supported types
-    # - validate_content_type() with unsupported type (should raise)
-    # - validate_file_extension() with supported extensions
-    # - validate_file_extension() with unsupported extension (should raise)
-    # - validate_duration() with valid duration
-    # - validate_duration() with too short audio (should raise AudioTooShortError)
-    # - validate_duration() with too long audio (should raise AudioTooLongError)
-    # - validate_file_size() within limit
-    # - validate_file_size() exceeding limit (should raise)
-    pass
+
+def test_validate_content_type_invalid():
+    with pytest.raises(AudioValidationError):
+        AudioValidator.validate_content_type("text/plain")
+
+
+def test_validate_file_extension_valid():
+    AudioValidator.validate_file_extension("test_file.wav")
+    AudioValidator.validate_file_extension("recording.mp3")
+
+
+def test_validate_file_extension_invalid():
+    with pytest.raises(AudioValidationError):
+        AudioValidator.validate_file_extension("document.pdf")
+
+
+def test_validate_file_size_empty():
+    with pytest.raises(AudioValidationError):
+        AudioValidator.validate_file_size(b"")
+
+
+def test_validate_file_size_exceeded():
+    large_payload = b"0" * (51 * 1024 * 1024)
+    with pytest.raises(AudioDigestionError) as exc_info:
+        AudioValidator.validate_file_size(large_payload, max_size_mb=50)
+    assert exc_info.value.status_code == 413

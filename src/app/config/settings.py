@@ -35,11 +35,19 @@ class Settings(BaseSettings):
     age_model_name: str = "audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim"
     age_confidence_threshold: float = 0.5
 
-    # ── Audio Processing ────────────────────
+    # ── Audio Processing & VAD ──────────────
     audio_max_duration_seconds: int = 30
     audio_target_sample_rate: int = 16000
     audio_chunk_size_ms: int = 5000
     audio_min_snr_db: float = 10.0
+
+    vad_min_speech_ratio: float = 0.30
+    vad_min_speech_duration_ms: int = 1000
+
+    # ── Quality Assessment ──────────────────
+    snr_good_threshold_db: float = 18.0
+    snr_degraded_threshold_db: float = 5.0
+    clipping_max_ratio: float = 0.005
 
     # ── Resilience ──────────────────────────
     circuit_breaker_failure_threshold: int = 5

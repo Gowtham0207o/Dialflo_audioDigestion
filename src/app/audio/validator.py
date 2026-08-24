@@ -35,18 +35,18 @@ class AudioValidator:
             AudioValidationError: If the format is not supported.
         """
         if not content_type:
-            return  # Allow fallback to file extension or magic bytes check
+            return  # Fallback to extension/header magic bytes check
 
         normalized_type = content_type.lower().split(";")[0].strip()
 
-        # Allow application/octet-stream and multipart form defaults for binary uploads
+        # Allow application/octet-stream and multipart form defaults
         if normalized_type in {"application/octet-stream", "multipart/form-data"}:
             return
 
         if normalized_type not in SUPPORTED_AUDIO_FORMATS:
             logger.warning("Unsupported content type attempted", content_type=content_type)
             raise AudioValidationError(
-                f"Unsupported content type '{content_type}'. Supported formats: {', '.join(sorted(SUPPORTED_AUDIO_FORMATS))}"
+                f"Unsupported content-type '{content_type}'. Supported formats: {', '.join(sorted(SUPPORTED_AUDIO_FORMATS))}"
             )
 
     @staticmethod
@@ -88,20 +88,22 @@ class AudioValidator:
 
     @staticmethod
     def validate_file_size(audio_bytes: bytes, max_size_mb: int = 50) -> None:
-        """Validate that the uploaded file isn't too large.
+        """Validate that the uploaded file isn't empty and within size limit.
 
         Args:
             audio_bytes: Raw audio bytes.
             max_size_mb: Maximum allowed file size in megabytes.
 
         Raises:
-            AudioValidationError: If the file exceeds the size limit.
+            AudioValidationError: If payload is empty or exceeds limit.
         """
-        if not audio_bytes:
-            raise AudioValidationError("Uploaded audio payload is empty.")
+        if not audio_bytes or len(audio_bytes) == 0:
+            raise AudioValidationError("Audio file is missing or empty.")
 
         max_bytes = max_size_mb * 1024 * 1024
         if len(audio_bytes) > max_bytes:
-            raise AudioValidationError(
-                f"Audio file size ({len(audio_bytes) / (1024*1024):.2f} MB) exceeds maximum allowed {max_size_mb} MB."
+            from app.core.exceptions import AudioDigestionError
+            raise AudioDigestionError(
+                f"Audio file size ({len(audio_bytes) / (1024*1024):.2f} MB) exceeds maximum allowed size of {max_size_mb} MB.",
+                status_code=413,
             )
