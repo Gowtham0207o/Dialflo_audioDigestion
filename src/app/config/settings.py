@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     # ── Model Configuration ─────────────────
     model_cache_dir: str = "./models"
     model_device: str = "cpu"
+    ml_target_duration_seconds: float = 3.0
+    speech_encoder_model_name: str = "speechbrain/spkrec-ecapa-voxceleb"
 
     gender_model_name: str = "speechbrain/spkrec-ecapa-voxceleb"
     gender_confidence_threshold: float = 0.6
@@ -41,13 +43,17 @@ class Settings(BaseSettings):
     audio_chunk_size_ms: int = 5000
     audio_min_snr_db: float = 10.0
 
+    silero_vad_threshold: float = 0.50
     vad_min_speech_ratio: float = 0.30
     vad_min_speech_duration_ms: int = 1000
+    vad_merge_gap_ms: int = 300
+    vad_min_segment_duration_ms: int = 150
 
     # ── Quality Assessment ──────────────────
     snr_good_threshold_db: float = 18.0
     snr_degraded_threshold_db: float = 5.0
     clipping_max_ratio: float = 0.005
+    min_peak_amplitude: float = 0.01
 
     # ── Resilience ──────────────────────────
     circuit_breaker_failure_threshold: int = 5

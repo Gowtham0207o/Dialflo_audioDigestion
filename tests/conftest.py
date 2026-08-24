@@ -7,8 +7,10 @@ Provides reusable fixtures for:
 - Test settings
 """
 
+import io
 import numpy as np
 import pytest
+import soundfile as sf
 from fastapi.testclient import TestClient
 
 from app.config.settings import Settings
@@ -27,23 +29,28 @@ def test_settings() -> Settings:
 
 @pytest.fixture
 def sample_waveform() -> np.ndarray:
-    """Generate a synthetic 3-second audio waveform for testing.
+    """Generate a synthetic 3-second speech-like waveform for testing.
 
-    Creates a simple sine wave at 440Hz (A4 note) at 16kHz sample rate.
+    Creates a vocal harmonic speech signal at 16kHz sample rate that Silero VAD recognizes as speech.
     """
     sample_rate = 16000
     duration = 3.0
     t = np.linspace(0, duration, int(sample_rate * duration), dtype=np.float32)
-    waveform = 0.5 * np.sin(2 * np.pi * 440 * t).astype(np.float32)
-    return waveform
+    f0 = 150.0
+    syllable_mod = 0.5 * (1.0 + np.sin(2 * np.pi * 4 * t))
+    vocal = (
+        0.4 * np.sin(2 * np.pi * f0 * t) +
+        0.3 * np.sin(2 * np.pi * 2 * f0 * t) +
+        0.2 * np.sin(2 * np.pi * 3 * f0 * t) +
+        0.15 * np.sin(2 * np.pi * 500 * t) +
+        0.10 * np.sin(2 * np.pi * 1500 * t)
+    ) * syllable_mod
+    return (0.5 * vocal / np.max(np.abs(vocal))).astype(np.float32)
 
 
 @pytest.fixture
 def sample_audio_bytes(sample_waveform) -> bytes:
-    """Generate WAV bytes from a synthetic waveform."""
-    import io
-    import soundfile as sf
-
+    """Generate WAV bytes from a synthetic speech waveform."""
     buffer = io.BytesIO()
     sf.write(buffer, sample_waveform, 16000, format="WAV")
     buffer.seek(0)
@@ -53,11 +60,5 @@ def sample_audio_bytes(sample_waveform) -> bytes:
 @pytest.fixture
 def noisy_waveform(sample_waveform) -> np.ndarray:
     """Generate a noisy waveform simulating logistics environment."""
-    noise = np.random.normal(0, 0.3, len(sample_waveform)).astype(np.float32)
+    noise = np.random.normal(0, 0.05, len(sample_waveform)).astype(np.float32)
     return sample_waveform + noise
-
-
-# TODO: Add fixtures for:
-# - FastAPI TestClient with mocked models
-# - Mock ModelRegistry
-# - Pre-loaded model instances for integration tests

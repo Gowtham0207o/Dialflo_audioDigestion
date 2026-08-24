@@ -14,9 +14,11 @@ from app.api.middleware.privacy_guard import PrivacyGuardMiddleware
 from app.api.middleware.request_timer import RequestTimerMiddleware
 from app.api.middleware.error_handler import GlobalErrorHandler
 from app.api.middleware.request_id import RequestIdMiddleware
+from app.audio.vad import VoiceActivityDetector
 from app.config.settings import get_settings
 from app.config.logging_config import setup_logging
 from app.inference.registry import ModelRegistry
+from app.inference.speech_encoder import SpeechEncoder
 from app.observability.logger import get_logger
 
 logger = get_logger(__name__)
@@ -29,6 +31,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     setup_logging(settings.app_log_level)
 
     logger.info("Starting DialFlo Audio Digestion Service", version=app.version)
+
+    # Pre-load Silero VAD model once at startup
+    logger.info("Pre-loading Silero VAD engine...")
+    VoiceActivityDetector.preload_model()
+
+    # Pre-load Pretrained Speech Encoder model once at startup
+    logger.info("Pre-loading Pretrained Speech Encoder (ECAPA-TDNN)...")
+    encoder = SpeechEncoder(model_name=settings.speech_encoder_model_name)
+    encoder.load()
 
     # Warm up model registry — loads and caches all models
     registry = ModelRegistry(settings)

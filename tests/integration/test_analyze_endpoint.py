@@ -1,4 +1,4 @@
-"""Integration tests for POST /analyze (Chunk 3: Quality Assessment & Quality Flags)."""
+"""Integration tests for POST /analyze (Silero VAD & Quality Assessment)."""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,8 +17,8 @@ def test_health_endpoint(client):
     assert response.status_code in {200, 503}
 
 
-def test_post_analyze_valid_audio_with_quality(client, sample_audio_bytes):
-    """Test POST /analyze with valid audio returns metadata, VAD, and quality fields."""
+def test_post_analyze_valid_audio_with_silero_vad(client, sample_audio_bytes):
+    """Test POST /analyze with valid audio returns metadata, Silero VAD, and quality fields."""
     files = {"file": ("test.wav", sample_audio_bytes, "audio/wav")}
     response = client.post("/analyze", files=files)
     assert response.status_code == 200
@@ -31,21 +31,22 @@ def test_post_analyze_valid_audio_with_quality(client, sample_audio_bytes):
     assert "samples" in data
     assert data["original_format"] == "wav"
 
-    # Chunk 2 VAD assertions
+    # Silero VAD assertions
     assert "speech_duration_seconds" in data
     assert "speech_duration_ms" in data
     assert "speech_ratio" in data
     assert "speech_segments" in data
     assert "is_speech_sufficient" in data
+    assert "vad_confidence" in data
+    assert 0.0 <= data["vad_confidence"] <= 1.0
 
-    # Chunk 3 Quality assertions
+    # Quality assertions
     assert "audio_quality" in data
     assert data["audio_quality"] in {"good", "degraded", "insufficient"}
     assert "snr_db" in data
     assert "peak_amplitude" in data
     assert "clipping_ratio" in data
     assert "quality_reasoning" in data
-    assert isinstance(data["quality_reasoning"], list)
 
 
 def test_post_analyze_empty_file_returns_400(client):

@@ -1,7 +1,6 @@
 """Response schemas matching API contracts.
 
-Defines Pydantic models for audio metadata response with VAD & quality metrics (Chunk 1-3)
-and full attribute response schemas.
+Defines Pydantic models for audio metadata response with Silero VAD & Multi-Signal Quality Metrics.
 """
 
 from __future__ import annotations
@@ -17,10 +16,11 @@ class SpeechSegmentSchema(BaseModel):
 
     start_seconds: float = Field(..., description="Start timestamp in seconds")
     end_seconds: float = Field(..., description="End timestamp in seconds")
+    confidence: float = Field(default=1.0, description="Segment VAD confidence [0.0, 1.0]")
 
 
 class AudioMetadataResponse(BaseModel):
-    """Audio metadata returned after FFmpeg normalization, VAD, and Quality Assessment (Chunks 1-3)."""
+    """Audio metadata returned after FFmpeg normalization, Silero VAD, and Multi-Signal Quality Assessment."""
 
     duration: float = Field(..., description="Duration in seconds")
     duration_ms: int = Field(..., description="Duration in milliseconds")
@@ -32,7 +32,7 @@ class AudioMetadataResponse(BaseModel):
     original_format: str = Field(..., description="Detected original format (e.g. wav, mp3, ogg)")
     processing_ms: int = Field(..., description="End-to-end processing time in milliseconds")
 
-    # ── Chunk 2: VAD Metrics ─────────────────
+    # ── Silero VAD Metrics ───────────────────
     speech_duration_seconds: float = Field(..., description="Total speech duration in seconds")
     speech_duration_ms: int = Field(..., description="Total speech duration in milliseconds")
     speech_ratio: float = Field(..., description="Ratio of speech duration to total audio duration [0.0, 1.0]")
@@ -43,12 +43,17 @@ class AudioMetadataResponse(BaseModel):
     is_speech_sufficient: bool = Field(
         ..., description="True if speech ratio and duration exceed minimum thresholds"
     )
+    vad_confidence: float = Field(
+        default=1.0, description="Average VAD model confidence score [0.0, 1.0]"
+    )
 
-    # ── Chunk 3: Quality Assessment Metrics ──
+    # ── Multi-Signal Quality Assessment Metrics ──
     audio_quality: AudioQuality = Field(..., description="Audio quality classification flag (good, degraded, insufficient)")
     snr_db: float = Field(..., description="Estimated Signal-to-Noise Ratio in dB")
     peak_amplitude: float = Field(..., description="Peak amplitude of the audio waveform [0.0, 1.0]")
     clipping_ratio: float = Field(..., description="Ratio of clipped samples (amplitude >= 0.99)")
+    rms_energy: float = Field(default=0.0, description="Root Mean Square (RMS) signal energy")
+    speech_energy_ratio: float = Field(default=1.0, description="Ratio of energy in speech frames to total audio energy [0.0, 1.0]")
     quality_reasoning: list[str] = Field(
         default_factory=list,
         description="Human-readable reasons for the audio_quality classification",

@@ -1,9 +1,11 @@
-"""POST /analyze and POST /v1/analyze — audio ingestion, FFmpeg normalization, VAD & Quality Assessment endpoint.
+"""POST /analyze and POST /v1/analyze — audio ingestion, FFmpeg normalization, Silero VAD, Quality Assessment, ML Input Prep & Speech Encoder endpoint.
 
 Accepts an audio file via multipart upload, validates input,
 decodes & normalizes to 16kHz mono float32 PCM using FFmpeg,
-runs Voice Activity Detection (VAD) and Audio Quality Assessment,
-and returns normalized metadata with VAD metrics and audio_quality flag.
+runs Silero Voice Activity Detection (VAD) with segment refinement,
+assesses multi-signal audio quality, prepares deterministic model-ready ML input waveform window,
+extracts 192-dim speech embedding vector via SpeechBrain ECAPA-TDNN,
+and classifies audio quality with transparent reasoning.
 """
 
 import time
@@ -11,10 +13,12 @@ from fastapi import APIRouter, File, UploadFile
 
 from app.api.v1.schemas.responses import AudioMetadataResponse, SpeechSegmentSchema
 from app.audio.codec import AudioCodec
+from app.audio.preprocessor import AudioPreprocessor
 from app.audio.quality import AudioQualityAssessor
 from app.audio.validator import AudioValidator
 from app.audio.vad import VoiceActivityDetector
 from app.config.settings import get_settings
+from app.inference.speech_encoder import SpeechEncoder
 from app.observability.logger import get_logger
 
 router = APIRouter()
@@ -24,18 +28,20 @@ logger = get_logger(__name__)
 @router.post(
     "/analyze",
     response_model=AudioMetadataResponse,
-    summary="Analyze, normalize, VAD, and quality assessment",
+    summary="Analyze, normalize, Silero VAD, quality assessment, ML input prep, and speech embedding extraction",
     description=(
         "Accepts an audio file via multipart upload, validates input constraints, "
         "decodes and normalizes the payload into 16 kHz, mono, PCM float32 waveform data via FFmpeg, "
-        "runs Voice Activity Detection (VAD), assesses audio quality (SNR, peak amplitude, clipping), "
-        "and classifies audio quality as good, degraded, or insufficient with clear reasoning."
+        "runs Silero Voice Activity Detection (VAD) with segment refinement (gap merging & fragment filtering), "
+        "evaluates multi-signal audio quality, prepares deterministic model-ready ML input waveform window, "
+        "extracts fixed 192-dimensional speech embedding vector via SpeechBrain ECAPA-TDNN, "
+        "and classifies audio quality with transparent reasoning."
     ),
 )
 async def analyze_audio(
     file: UploadFile = File(..., description="Audio file (WAV, MP3, OGG, FLAC, M4A, etc.)"),
 ) -> AudioMetadataResponse:
-    """Ingest, validate, decode via FFmpeg, run VAD, evaluate audio quality, and return metadata.
+    """Ingest, validate, decode via FFmpeg, run Silero VAD, evaluate multi-signal quality, prepare ML input, extract speech embedding, and return metadata.
 
     The audio payload is processed entirely in memory — no files touch disk.
     """
@@ -63,20 +69,37 @@ async def analyze_audio(
     # 4. Validate duration
     AudioValidator.validate_duration(segment)
 
-    # 5. Chunk 2: Voice Activity Detection (VAD)
+    # 5. Silero Voice Activity Detection (VAD) with Refinement Stage
     vad_detector = VoiceActivityDetector(
         min_speech_ratio=settings.vad_min_speech_ratio,
         min_speech_duration_ms=settings.vad_min_speech_duration_ms,
+        merge_gap_ms=settings.vad_merge_gap_ms,
+        min_segment_duration_ms=settings.vad_min_segment_duration_ms,
+        silero_threshold=settings.silero_vad_threshold,
     )
     vad_res = vad_detector.detect(segment.waveform, sample_rate=segment.sample_rate)
 
-    # 6. Chunk 3: Audio Quality Assessment
+    # 6. Multi-Signal Audio Quality Assessment
     quality_assessor = AudioQualityAssessor(
         snr_good_threshold_db=settings.snr_good_threshold_db,
         snr_degraded_threshold_db=settings.snr_degraded_threshold_db,
         clipping_max_ratio=settings.clipping_max_ratio,
+        min_peak_amplitude=settings.min_peak_amplitude,
     )
     qual_res = quality_assessor.assess(segment.waveform, vad_res, sample_rate=segment.sample_rate)
+
+    # 7. ML Input Preparation Stage
+    prepared_input = AudioPreprocessor.prepare(
+        waveform=segment.waveform,
+        vad_result=vad_res,
+        quality_result=qual_res,
+        target_duration_seconds=settings.ml_target_duration_seconds,
+        sample_rate=segment.sample_rate,
+    )
+
+    # 8. Pretrained Speech Encoder Inference Stage (192-dim vector)
+    speech_encoder = SpeechEncoder(model_name=settings.speech_encoder_model_name)
+    embedding_res = speech_encoder.encode(prepared_input)
 
     processing_ms = int((time.perf_counter() - t0) * 1000)
 
@@ -87,6 +110,10 @@ async def analyze_audio(
         speech_duration_ms=vad_res.speech_duration_ms,
         audio_quality=qual_res.audio_quality.value,
         snr_db=qual_res.snr_db,
+        vad_confidence=vad_res.vad_confidence,
+        is_prepared_valid=prepared_input.is_prepared_valid,
+        embedding_is_valid=embedding_res.is_valid,
+        encoder_inference_ms=embedding_res.inference_ms,
         processing_ms=processing_ms,
     )
 
@@ -104,13 +131,20 @@ async def analyze_audio(
         speech_duration_ms=vad_res.speech_duration_ms,
         speech_ratio=vad_res.speech_ratio,
         speech_segments=[
-            SpeechSegmentSchema(start_seconds=s.start_seconds, end_seconds=s.end_seconds)
+            SpeechSegmentSchema(
+                start_seconds=s.start_seconds,
+                end_seconds=s.end_seconds,
+                confidence=s.confidence,
+            )
             for s in vad_res.speech_segments
         ],
         is_speech_sufficient=vad_res.is_speech_sufficient,
+        vad_confidence=vad_res.vad_confidence,
         audio_quality=qual_res.audio_quality,
         snr_db=qual_res.snr_db,
         peak_amplitude=qual_res.peak_amplitude,
         clipping_ratio=qual_res.clipping_ratio,
+        rms_energy=qual_res.rms_energy,
+        speech_energy_ratio=qual_res.speech_energy_ratio,
         quality_reasoning=qual_res.quality_reasoning,
     )
