@@ -1,0 +1,18 @@
+# Development overrides — use with: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+services:
+  audio-digestion:
+    build:
+      dockerfile: docker/Dockerfile.dev
+    container_name: dialflo-audio-digestion-dev
+    environment:
+      - APP_ENV=development
+      - APP_DEBUG=true
+      - APP_LOG_LEVEL=DEBUG
+    volumes:
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+      - model-cache:/app/models
+    ports:
+      - "8000:8000"
+      - "5678:5678"   # debugpy remote debugging
+    read_only: false

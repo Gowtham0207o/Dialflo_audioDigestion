@@ -1,0 +1,56 @@
+# ── Python ──────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ───────────────────
+.venv/
+venv/
+env/
+
+# ── IDE ────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Environment ────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── Models (downloaded at build time) ──────
+models/
+*.pt
+*.bin
+*.onnx
+*.safetensors
+
+# ── Audio test data (large files) ──────────
+eval/datasets/*
+!eval/datasets/.gitkeep
+tests/fixtures/audio/*
+!tests/fixtures/audio/.gitkeep
+!tests/fixtures/audio/README.md
+
+# ── OS ─────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Coverage & test reports ────────────────
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.pytest_cache/
+
+# ── mypy ───────────────────────────────────
+.mypy_cache/
