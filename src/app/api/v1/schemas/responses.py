@@ -90,6 +90,13 @@ class AudioMetadataResponse(BaseModel):
     gender: GenderResponse | None = Field(default=None, description="Gender classification prediction response")
     age_bracket: AgeBracketResponse | None = Field(default=None, description="Age bracket estimation prediction response")
 
+    # ── Observability ────────────────────────────
+    model_used: str = Field(default="chunkformer_baseline", description="Model pipeline that produced the attribute predictions")
+    timing_breakdown: dict[str, int] = Field(
+        default_factory=dict,
+        description="Per-stage timing breakdown in milliseconds (vad_ms, quality_ms, ml_prep_ms, inference_ms, total_ms)",
+    )
+
 
 class AnalyzeResponse(BaseModel):
     """Full analysis response schema."""
