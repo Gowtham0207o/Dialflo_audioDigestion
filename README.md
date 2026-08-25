@@ -47,7 +47,7 @@ flowchart TD
 | **Voice Activity** | Silero VAD | Neural VAD is significantly more robust to background noise in logistics environments than simple energy-based (RMS) VAD. | Increased CPU latency compared to WebRTC VAD. |
 | **Audio Quality** | Explicit SNR/Clipping checks | VAD detects speech, but does not guarantee clean speech. Low SNR triggers graceful degradation or abstention. | Additional computational overhead during preprocessing. |
 | **Feature Extractor** | ECAPA-TDNN (`SpeechEncoder`) | Highly optimized 192-d speaker embeddings designed for voice characteristics; runs fast on CPU. | Less contextual understanding than large transformers (e.g., Wav2Vec2). |
-| **Ensemble Rejection** | Single Pathway over Ensembles | Ensembling multiple heavy models (e.g., Wav2Vec2 + ECAPA-TDNN) increased latency by 380% for only a 1.2% F1 gain. | Sacrifices a marginal accuracy boost for strict <100ms real-time guarantees. |
+| **Ensemble Rejection** | Single Pathway over Ensembles | The measured tradeoff showed a large latency increase for only a marginal F1 improvement. | Sacrifices a minor potential accuracy boost to strictly maintain real-time constraints. |
 | **Model Structure** | Custom Linear Heads | Decouples feature extraction from classification. Allows independent confidence tuning for age vs. gender. | Requires maintaining custom PyTorch weights (`.pt` files). |
 | **Abstention** | Confidence Thresholding | Forced predictions on out-of-distribution or degraded audio erode user trust. Returning `unknown` is safer. | Lower overall coverage/recall if thresholds are too strict. |
 | **Inference Target** | CPU-bound Inference | Cost-effective scaling for a logistics API without requiring expensive GPU instances. | Less throughput per node compared to GPU batching. |
@@ -88,13 +88,13 @@ curl -X POST "http://localhost:8000/analyse" \
   "contact_id": "uuid",
   "gender": {
     "prediction": "male",
-    "confidence": 0.94
+    "confidence": 0.85
   },
   "age_bracket": {
-    "prediction": "31-45",
-    "confidence": 0.82
+    "prediction": "unknown",
+    "confidence": 0.0
   },
-  "processing_ms": 42,
+  "processing_ms": 342,
   "audio_quality": "good"
 }
 ```
@@ -159,41 +159,48 @@ make test-smoke
 
 ## Training & Evaluation
 
-The linear classification heads (`GenderNet`, `AgeNet`) were trained extensively on the **Mozilla Common Voice** dataset to map 192-d ECAPA-TDNN embeddings to specific demographic labels. 
+The system is designed to map 192-d ECAPA-TDNN embeddings to demographic labels via linear classification heads (`GenderNet`, `AgeNet`). The evaluation harness perfectly mirrors the production pipeline to prevent train-serve skew.
 
-**Training Statistics**:
-- **Dataset**: Mozilla Common Voice (English, Validated subset)
-- **Training Samples**: 142,500 audio clips
-- **Validation Samples**: 15,200 audio clips
-- **Epochs**: 50 (Early stopping at 38)
-- **Optimizer**: AdamW (lr=3e-4)
+### Data Splits
+- **Training Data**: Used exclusively for optimizing the neural network weights.
+- **Validation Data**: Used to tune hyperparameters and early stopping criteria.
+- **Test/Evaluation Data**: Held-out data used strictly for benchmarking performance. 
 
-**Evaluation Metrics (Test Set)**:
-We evaluate the system using an offline harness (`make eval`) that perfectly mirrors the production pipeline.
+### Metrics Objective
+- **Benchmark Sample Size**: ~1,700 samples  [TARGET]
+- **Overall Accuracy**: 0.832 [TARGET]
 
-- **Test Samples Evaluated**: 12,450
-- **Overall Accuracy**: 91.2%
-- **Gender F1 Score**: 0.948 (Male: 0.952, Female: 0.944)
-- **Age Bracket F1 Score**: 0.884 (4-class classification)
-- **Expected Calibration Error (ECE)**: 0.042 (Highly calibrated confidences)
-- **Unknown Rate (Abstention)**: 3.4% (Audio rejected due to severe degradation)
+### Measured Metrics (Test Set)
+The metrics below represent actual benchmarking runs executed against the offline harness.
+
+- **Total Eval Samples**: 950 [MEASURED]
+- **Valid Samples Processed**: 868 [MEASURED]
+- **Gender Accuracy**: 0.749 [MEASURED]
+- **Gender Macro F1 Score**: 0.541 [MEASURED]
+
+*Note: The current iteration relies on uncalibrated weights for the multi-class age estimation head, resulting in a 100% unknown rate under the default 0.50 threshold due to strict abstention logic.*
 
 ## Performance & Latency
 
-By extracting features once (ECAPA-TDNN) and sharing them across multiple lightweight linear heads, the system achieves sub-50ms latency per request on standard CPU hardware.
+By extracting features once (ECAPA-TDNN) and sharing them across multiple lightweight linear heads, the system optimizes for CPU execution.
 
-**Measured Latency (Intel Xeon Platinum, Docker)**:
-- **Decoding & VAD**: 12ms (p50) | 18ms (p95)
-- **Quality & Preprocessing**: 8ms (p50) | 11ms (p95)
-- **ECAPA-TDNN Encoding**: 22ms (p50) | 28ms (p95)
-- **Linear Classification Heads**: 1ms (p50) | 2ms (p95)
-- **Total Pipeline Latency**: **43ms (p50)** | **59ms (p95)** | **82ms (p99)**
+- **Assignment Target**: <500 ms end-to-end for a 5-second audio chunk. [TARGET]
+- **Latency Target**: ~398 ms P95 [TARGET]
 
-This ultra-low latency makes the API well-suited for synchronous voice bots and real-time WebSocket streams.
+### Measured Latency
+Actual performance measured against the offline harness on a standard CPU node:
 
-## Future Architecture: Handling 1,000 Concurrent Calls
+| Metric | p50 (ms) | p95 (ms) | p99 (ms) |
+|---|---:|---:|---:|
+| Preprocess (Decode/VAD/Quality) | 115 | 192 | 344 |
+| Inference (ECAPA-TDNN + Heads) | 178 | 280 | 338 |
+| **Total Pipeline** | **298** | **463** | **724** |
 
-While the current synchronous CPU design easily handles ~50-100 requests per second per node, scaling to 1,000 concurrent real-time audio streams requires adopting an asynchronous streaming and dynamic batching architecture.
+**The measured latency (P95 Total = 463 ms) is within the assignment's 500 ms target under the documented benchmark configuration.**
+
+## Future Architecture: Handling Concurrent Calls
+
+While the current synchronous CPU design handles individual requests efficiently, scaling to heavily concurrent real-time audio streams requires adopting an asynchronous streaming architecture.
 
 ```mermaid
 flowchart TD
@@ -221,8 +228,8 @@ flowchart TD
     WS1 -->|Raw Audio Chunks| K
     WS2 -->|Raw Audio Chunks| K
     
-    K -->|Pull Batch sizes of 32| W1
-    K -->|Pull Batch sizes of 32| W2
+    K -->|Pull Batch chunks| W1
+    K -->|Pull Batch chunks| W2
     
     W1 -.->|1. Vectorized VAD| W1
     W1 -.->|2. Batch ECAPA-TDNN| W1
@@ -232,19 +239,19 @@ flowchart TD
 ```
 
 **Key Architectural Evolutions for Scale:**
-1. **Dynamic Batching Engine**: Instead of processing embeddings sequentially (Batch Size = 1), Inference Workers will pull requests from a Redis Stream and batch them up to `[32, 192]` tensors for parallel matrix multiplication. This increases CPU throughput by ~12x.
-2. **Stateless API Gateway**: The FastAPI servers will handle WebSocket connections and ingest raw chunks, but offload the ML processing to backend workers via a fast message broker.
-3. **Horizontal Pod Autoscaling (HPA)**: Worker nodes will scale automatically based on queue depth metrics, ensuring latency stays strictly under 100ms even during extreme traffic spikes.
+1. **Dynamic Batching Engine**: Instead of processing embeddings sequentially, inference workers will pull requests from a message broker and batch them for parallel execution.
+2. **Stateless Scalability**: The current service is stateless and can be horizontally scaled. At higher concurrency, inference workers can be separated from HTTP/WebSocket ingestion and bounded batching can be introduced after load testing establishes the appropriate operating point.
+3. **Horizontal Pod Autoscaling (HPA)**: Worker nodes will scale automatically based on queue depth metrics to maintain stable latency during traffic spikes.
 
 ## Reliability & Observability
 
 - **Tracing**: Every request receives a unique `X-Request-ID` propagated through all `structlog` entries.
-- **Metrics**: Prometheus metrics are exposed at `/metrics`, tracking `audio_digestion_request_latency_seconds`, `audio_digestion_inference_errors_total`, and confidence histograms.
-- **Resilience**: `CircuitBreaker` protects model inference. If the model throws 5 consecutive errors, it opens for 30 seconds to allow the system to recover gracefully.
+- **Metrics**: Prometheus metrics are exposed at `/metrics`, tracking latency and inference errors.
+- **Resilience**: `CircuitBreaker` protects model inference. If the model throws consecutive errors, it opens to allow the system to recover gracefully.
 
 ## Privacy
 
 The system processes audio entirely in-memory.
 - Audio bytes are never written to disk.
-- The `PrivacyGuard` class explicitly zero-fills audio arrays (`waveform.fill(0)`) immediately after inference.
+- The `PrivacyGuard` class explicitly zero-fills audio arrays immediately after inference.
 - No user-identifiable acoustic features are logged or retained.
