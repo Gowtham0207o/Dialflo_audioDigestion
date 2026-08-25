@@ -8,35 +8,26 @@ We process audio through a strict, deterministic pipeline before any neural infe
 
 ```mermaid
 flowchart TD
-    A[Client Request] --> B{Transport}
-    B -->|HTTP| C[REST API]
-    B -->|WebSocket| D[Stream API]
+    A[Audio] --> B[Ingestion / Validation]
+    B --> C[FFmpeg Normalization<br>16 kHz / Mono / Float32]
+    C --> D[Silero VAD]
+    D --> E[Speech Segment Merge]
+    E --> F[Quality Assessment<br>SNR / RMS / Clipping<br>Speech Ratio / VAD]
     
-    C --> E[Validation Stage]
-    D --> E
+    F -->|Insufficient| G[UNKNOWN]
+    F -->|Usable| H[Speech Extraction]
     
-    E --> F[Decoding Stage]
-    F -->|FFmpeg/SoundFile| G[16kHz Mono Float32]
+    H --> I[ECAPA-TDNN]
+    I --> J[192-d embedding]
     
-    G --> H[VAD Stage]
-    H -->|Silero| I[Speech Segments]
+    J --> K[GenderNet]
+    J --> L[AgeNet]
     
-    I --> J[Quality Stage]
-    J -->|SNR, Clipping, RMS| K[Audio Quality Report]
+    K --> M[Confidence]
+    L --> M
     
-    K --> L[Preprocessing Stage]
-    L -->|Truncate/Pad to 3s| M[Prepared ML Input]
-    
-    M --> N[Inference Stage]
-    N -->|SpeechEncoder| O[192-d ECAPA-TDNN Embedding]
-    
-    O --> P[GenderNet Head]
-    O --> Q[AgeNet Head]
-    
-    P --> R[Confidence Thresholding]
-    Q --> R
-    
-    R --> S[Analysis Result]
+    M --> N[Decision Policy]
+    N --> O[JSON]
 ```
 
 ## Engineering Decisions
