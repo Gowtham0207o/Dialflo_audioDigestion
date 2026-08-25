@@ -35,17 +35,17 @@ class Settings(BaseSettings):
     gender_confidence_threshold: float = 0.6
 
     age_model_name: str = "audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim"
-    age_confidence_threshold: float = 0.5
+    age_confidence_threshold: float = 0.20
 
     # ── Custom Encoder Model ───────────────
     custom_encoder_gender_threshold: float = 0.60
-    custom_encoder_age_threshold: float = 0.50
+    custom_encoder_age_threshold: float = 0.20
 
     # ── Ensemble Configuration ─────────────
     ensemble_enabled: bool = True
     ensemble_weights: str = "0.5,0.5"
     ensemble_gender_threshold: float = 0.60
-    ensemble_age_threshold: float = 0.50
+    ensemble_age_threshold: float = 0.20
 
     # ── Audio Processing & VAD ──────────────
     audio_max_duration_seconds: int = 30

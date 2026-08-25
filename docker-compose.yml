@@ -7,11 +7,16 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - APP_ENV=production
+      - APP_ENV=development
       - APP_HOST=0.0.0.0
       - APP_PORT=8000
       - APP_LOG_LEVEL=INFO
       - MODEL_DEVICE=cpu
+      - ENSEMBLE_ENABLED=true
+      - AGE_CONFIDENCE_THRESHOLD=0.20
+      - ENSEMBLE_AGE_THRESHOLD=0.20
+      - TORCH_HOME=/tmp/cache
+      - HF_HOME=/tmp/cache
     volumes:
       - model-cache:/app/models
     tmpfs:

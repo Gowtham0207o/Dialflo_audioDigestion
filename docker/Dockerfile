@@ -12,9 +12,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /build
 
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir .
+    pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu .
 
 # Pre-download model weights so they're baked into the image
 COPY scripts/download_models.py ./scripts/
@@ -53,7 +54,9 @@ USER appuser
 
 ENV PYTHONPATH=/app/src \
     PYTHONUNBUFFERED=1 \
-    MODEL_CACHE_DIR=/app/models
+    MODEL_CACHE_DIR=/app/models \
+    TORCH_HOME=/tmp/cache \
+    HF_HOME=/tmp/cache
 
 EXPOSE 8000
 

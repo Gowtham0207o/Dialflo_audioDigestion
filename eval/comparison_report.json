@@ -1,13 +1,13 @@
 {
-  "timestamp": "2026-08-24T21:06:40Z",
-  "disagreement_rate": 1.0,
-  "disagreement_count": 1,
+  "timestamp": "2026-08-25T17:43:28Z",
+  "disagreement_rate": 0.0,
+  "disagreement_count": 0,
   "valid_sample_count": 1,
   "models": {
     "chunkformer_baseline": {
       "model_name": "chunkformer_baseline",
-      "total_evaluations": 15,
-      "sample_count": 3,
+      "total_evaluations": 5,
+      "sample_count": 1,
       "valid_sample_count": 1,
       "accuracy": 1.0,
       "confusion_matrix": {
@@ -18,259 +18,127 @@
         "unknown": 0
       },
       "latency_ms": {
-        "mean": 318.2,
-        "std": 18.07,
-        "min": 296,
-        "max": 343,
-        "p50": 320,
-        "p95": 340
+        "mean": 179.4,
+        "std": 27.22,
+        "min": 162,
+        "max": 233,
+        "p50": 165,
+        "p95": 221
       },
       "sample_results": [
-        {
-          "filename": "female_sample_1.wav",
-          "ground_truth_gender": "female",
-          "ground_truth_age": "18-30",
-          "predicted_gender": "unknown",
-          "predicted_age": "unknown",
-          "gender_confidence": 0.0,
-          "age_confidence": 0.0,
-          "gender_probs": {
-            "male": 0.0,
-            "female": 0.0
-          },
-          "age_probs": {
-            "18-30": 0.0,
-            "31-45": 0.0,
-            "46-60": 0.0,
-            "60+": 0.0
-          },
-          "is_prepared_valid": false,
-          "is_valid": false,
-          "mean_latency_ms": 0.0
-        },
-        {
-          "filename": "male_sample_1.wav",
-          "ground_truth_gender": "male",
-          "ground_truth_age": "31-45",
-          "predicted_gender": "unknown",
-          "predicted_age": "unknown",
-          "gender_confidence": 0.0,
-          "age_confidence": 0.0,
-          "gender_probs": {
-            "male": 0.0,
-            "female": 0.0
-          },
-          "age_probs": {
-            "18-30": 0.0,
-            "31-45": 0.0,
-            "46-60": 0.0,
-            "60+": 0.0
-          },
-          "is_prepared_valid": false,
-          "is_valid": false,
-          "mean_latency_ms": 0.0
-        },
         {
           "filename": "Sample5Normalgroupspeech.ogg",
           "ground_truth_gender": "male",
           "ground_truth_age": "46-60",
           "predicted_gender": "male",
-          "predicted_age": "46-60",
+          "predicted_age": "unknown",
           "gender_confidence": 1.0,
-          "age_confidence": 0.9999,
+          "age_confidence": 0.2639,
           "gender_probs": {
             "male": 1.0,
             "female": 0.0
           },
           "age_probs": {
-            "18-30": 0.0001,
-            "31-45": 0.0,
-            "46-60": 0.9999,
-            "60+": 0.0
+            "18-30": 0.2462,
+            "31-45": 0.2344,
+            "46-60": 0.2639,
+            "60+": 0.2556
           },
           "is_prepared_valid": true,
           "is_valid": true,
-          "mean_latency_ms": 318.2
+          "mean_latency_ms": 179.4
         }
       ]
     },
     "custom_encoder": {
       "model_name": "custom_encoder",
-      "total_evaluations": 15,
-      "sample_count": 3,
+      "total_evaluations": 5,
+      "sample_count": 1,
       "valid_sample_count": 1,
-      "accuracy": 0.0,
+      "accuracy": 1.0,
       "confusion_matrix": {
-        "male_as_male": 0,
-        "male_as_female": 1,
+        "male_as_male": 1,
+        "male_as_female": 0,
         "female_as_female": 0,
         "female_as_male": 0,
         "unknown": 0
       },
       "latency_ms": {
-        "mean": 318.8,
-        "std": 10.4,
-        "min": 300,
-        "max": 331,
-        "p50": 319,
-        "p95": 329
+        "mean": 173.6,
+        "std": 16.43,
+        "min": 154,
+        "max": 198,
+        "p50": 176,
+        "p95": 195
       },
       "sample_results": [
-        {
-          "filename": "female_sample_1.wav",
-          "ground_truth_gender": "female",
-          "ground_truth_age": "18-30",
-          "predicted_gender": "unknown",
-          "predicted_age": "unknown",
-          "gender_confidence": 0.0,
-          "age_confidence": 0.0,
-          "gender_probs": {
-            "male": 0.0,
-            "female": 0.0
-          },
-          "age_probs": {
-            "18-30": 0.0,
-            "31-45": 0.0,
-            "46-60": 0.0,
-            "60+": 0.0
-          },
-          "is_prepared_valid": false,
-          "is_valid": false,
-          "mean_latency_ms": 0.0
-        },
-        {
-          "filename": "male_sample_1.wav",
-          "ground_truth_gender": "male",
-          "ground_truth_age": "31-45",
-          "predicted_gender": "unknown",
-          "predicted_age": "unknown",
-          "gender_confidence": 0.0,
-          "age_confidence": 0.0,
-          "gender_probs": {
-            "male": 0.0,
-            "female": 0.0
-          },
-          "age_probs": {
-            "18-30": 0.0,
-            "31-45": 0.0,
-            "46-60": 0.0,
-            "60+": 0.0
-          },
-          "is_prepared_valid": false,
-          "is_valid": false,
-          "mean_latency_ms": 0.0
-        },
         {
           "filename": "Sample5Normalgroupspeech.ogg",
           "ground_truth_gender": "male",
           "ground_truth_age": "46-60",
-          "predicted_gender": "female",
-          "predicted_age": "60+",
+          "predicted_gender": "male",
+          "predicted_age": "unknown",
           "gender_confidence": 1.0,
-          "age_confidence": 1.0,
+          "age_confidence": 0.2639,
           "gender_probs": {
-            "male": 0.0,
-            "female": 1.0
+            "male": 1.0,
+            "female": 0.0
           },
           "age_probs": {
-            "18-30": 0.0,
-            "31-45": 0.0,
-            "46-60": 0.0,
-            "60+": 1.0
+            "18-30": 0.2462,
+            "31-45": 0.2344,
+            "46-60": 0.2639,
+            "60+": 0.2556
           },
           "is_prepared_valid": true,
           "is_valid": true,
-          "mean_latency_ms": 318.8
+          "mean_latency_ms": 173.6
         }
       ]
     },
     "ensemble": {
       "model_name": "ensemble",
-      "total_evaluations": 15,
-      "sample_count": 3,
+      "total_evaluations": 5,
+      "sample_count": 1,
       "valid_sample_count": 1,
-      "accuracy": 0.0,
+      "accuracy": 1.0,
       "confusion_matrix": {
-        "male_as_male": 0,
+        "male_as_male": 1,
         "male_as_female": 0,
         "female_as_female": 0,
         "female_as_male": 0,
-        "unknown": 1
+        "unknown": 0
       },
       "latency_ms": {
-        "mean": 616.4,
-        "std": 63.25,
-        "min": 505,
-        "max": 693,
-        "p50": 619,
-        "p95": 685
+        "mean": 320.4,
+        "std": 2.87,
+        "min": 315,
+        "max": 323,
+        "p50": 322,
+        "p95": 322
       },
       "sample_results": [
-        {
-          "filename": "female_sample_1.wav",
-          "ground_truth_gender": "female",
-          "ground_truth_age": "18-30",
-          "predicted_gender": "unknown",
-          "predicted_age": "unknown",
-          "gender_confidence": 0.0,
-          "age_confidence": 0.0,
-          "gender_probs": {
-            "male": 0.0,
-            "female": 0.0
-          },
-          "age_probs": {
-            "18-30": 0.0,
-            "31-45": 0.0,
-            "46-60": 0.0,
-            "60+": 0.0
-          },
-          "is_prepared_valid": false,
-          "is_valid": false,
-          "mean_latency_ms": 0.0
-        },
-        {
-          "filename": "male_sample_1.wav",
-          "ground_truth_gender": "male",
-          "ground_truth_age": "31-45",
-          "predicted_gender": "unknown",
-          "predicted_age": "unknown",
-          "gender_confidence": 0.0,
-          "age_confidence": 0.0,
-          "gender_probs": {
-            "male": 0.0,
-            "female": 0.0
-          },
-          "age_probs": {
-            "18-30": 0.0,
-            "31-45": 0.0,
-            "46-60": 0.0,
-            "60+": 0.0
-          },
-          "is_prepared_valid": false,
-          "is_valid": false,
-          "mean_latency_ms": 0.0
-        },
         {
           "filename": "Sample5Normalgroupspeech.ogg",
           "ground_truth_gender": "male",
           "ground_truth_age": "46-60",
-          "predicted_gender": "unknown",
-          "predicted_age": "46-60",
-          "gender_confidence": 0.5,
-          "age_confidence": 0.5,
+          "predicted_gender": "male",
+          "predicted_age": "unknown",
+          "gender_confidence": 1.0,
+          "age_confidence": 0.2639,
           "gender_probs": {
-            "male": 0.5,
-            "female": 0.5
+            "male": 1.0,
+            "female": 0.0
           },
           "age_probs": {
-            "18-30": 0.0001,
-            "31-45": 0.0,
-            "46-60": 0.5,
-            "60+": 0.5
+            "18-30": 0.2462,
+            "31-45": 0.2344,
+            "46-60": 0.2639,
+            "60+": 0.2556
           },
           "is_prepared_valid": true,
           "is_valid": true,
-          "mean_latency_ms": 616.4
+          "mean_latency_ms": 320.4
         }
       ]
     }

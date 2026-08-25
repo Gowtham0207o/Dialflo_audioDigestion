@@ -39,48 +39,11 @@ AGE_ENUM_MAP = {
 }
 
 
-class CustomGenderHead(nn.Module):
-    """Lightweight linear gender classification head: 192-dim → 2-class softmax.
+from app.inference.strategies.gender_classifier import GenderNet
+from app.inference.strategies.age_estimator import AgeNet
 
-    Uses a single Linear layer (no hidden layers) for minimal parameter count.
-    Deterministic initialization with seed 123 (distinct from ChunkFormer's seed 42).
-    """
-
-    def __init__(self, embedding_dim: int = 192) -> None:
-        super().__init__()
-        self.fc = nn.Linear(embedding_dim, 2)
-        self.softmax = nn.Softmax(dim=-1)
-
-        # Deterministic initialization — seed 123 for distinct weights from ChunkFormer
-        torch.manual_seed(123)
-        nn.init.xavier_normal_(self.fc.weight)
-        nn.init.constant_(self.fc.bias, 0.0)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass: [N, 192] → [N, 2] softmax probabilities (0: male, 1: female)."""
-        return self.softmax(self.fc(x))
-
-
-class CustomAgeHead(nn.Module):
-    """Lightweight linear age classification head: 192-dim → 4-class softmax.
-
-    Uses a single Linear layer for minimal parameter count.
-    Deterministic initialization with seed 123.
-    """
-
-    def __init__(self, embedding_dim: int = 192) -> None:
-        super().__init__()
-        self.fc = nn.Linear(embedding_dim, 4)
-        self.softmax = nn.Softmax(dim=-1)
-
-        # Deterministic initialization — seed 123 for distinct weights
-        torch.manual_seed(123)
-        nn.init.xavier_normal_(self.fc.weight)
-        nn.init.constant_(self.fc.bias, 0.0)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass: [N, 192] → [N, 4] softmax probabilities (18-30, 31-45, 46-60, 60+)."""
-        return self.softmax(self.fc(x))
+CustomGenderHead = GenderNet
+CustomAgeHead = AgeNet
 
 
 class CustomEncoderModel(AttributeModel):

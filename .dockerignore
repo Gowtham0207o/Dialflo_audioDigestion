@@ -18,7 +18,6 @@ docs/
 eval/datasets/
 tests/fixtures/audio/*.wav
 tests/fixtures/audio/*.mp3
-README.md
 DESIGN.md
 PRIVACY.md
 LICENSE

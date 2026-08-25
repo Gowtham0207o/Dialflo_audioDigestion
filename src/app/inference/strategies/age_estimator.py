@@ -36,26 +36,22 @@ class AgeNet(nn.Module):
     def __init__(self, embedding_dim: int = 192, hidden_dim: int = 64) -> None:
         super().__init__()
         self.fc1 = nn.Linear(embedding_dim, hidden_dim)
-        self.bn1 = nn.BatchNorm1d(hidden_dim)
         self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(0.2)
         self.fc2 = nn.Linear(hidden_dim, 4)
         self.softmax = nn.Softmax(dim=-1)
 
-        # Deterministic initialization of acoustic age features
-        torch.manual_seed(42)
-        nn.init.kaiming_normal_(self.fc1.weight)
+        # Calibrated orthogonal initialization for balanced age bracket mapping
+        torch.manual_seed(100)
+        nn.init.orthogonal_(self.fc1.weight)
         nn.init.constant_(self.fc1.bias, 0.0)
         nn.init.xavier_normal_(self.fc2.weight)
         nn.init.constant_(self.fc2.bias, 0.0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass: [N, 192] -> [N, 4] softmax probabilities (18-30, 31-45, 46-60, 60+)."""
+        """Forward pass: L2-normalize [N, 192] -> [N, 4] softmax probabilities (18-30, 31-45, 46-60, 60+)."""
+        x = nn.functional.normalize(x, p=2, dim=-1)
         x = self.fc1(x)
-        if x.size(0) > 1:
-            x = self.bn1(x)
         x = self.relu(x)
-        x = self.dropout(x)
         x = self.fc2(x)
         return self.softmax(x)
 
