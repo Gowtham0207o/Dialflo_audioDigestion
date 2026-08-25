@@ -10,7 +10,22 @@ from pydantic import BaseModel, Field
 
 from app.core.enums import AgeBracket, AudioQuality, Gender
 from app.domain.analysis_result import AnalysisResult
+import uuid
 
+class SimplifiedGenderResponse(BaseModel):
+    prediction: Gender
+    confidence: float
+
+class SimplifiedAgeBracketResponse(BaseModel):
+    prediction: AgeBracket
+    confidence: float
+
+class SimplifiedAnalyzeResponse(BaseModel):
+    contact_id: str
+    gender: SimplifiedGenderResponse
+    age_bracket: SimplifiedAgeBracketResponse
+    processing_ms: int
+    audio_quality: AudioQuality
 
 class SpeechSegmentSchema(BaseModel):
     """Timestamped speech segment interval."""

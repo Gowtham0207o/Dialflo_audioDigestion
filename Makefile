@@ -37,10 +37,10 @@ test-smoke: ## Run smoke test against running Docker service
 
 # ── Code Quality ───────────────────────────
 lint: ## Run linter
-	ruff check src/ tests/ eval/
+	ruff check src/ tests/ evaluation/
 
 format: ## Format code
-	ruff format src/ tests/ eval/
+	ruff format src/ tests/ evaluation/
 
 typecheck: ## Run type checker
 	mypy src/
@@ -57,7 +57,7 @@ docker-down: ## Stop Docker Compose services
 
 # ── Eval ───────────────────────────────────
 eval: ## Run evaluation harness
-	$(PYTHON) -m eval.run_eval
+	$(PYTHON) -m evaluation.run
 
 # ── Cleanup ────────────────────────────────
 clean: ## Remove build artifacts and caches

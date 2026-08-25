@@ -11,7 +11,16 @@ and returns normalized metadata with VAD, quality, gender, and age metrics.
 import time
 from fastapi import APIRouter, File, Request, UploadFile
 
-from app.api.v1.schemas.responses import AgeBracketResponse, AudioMetadataResponse, GenderResponse, SpeechSegmentSchema
+from app.api.v1.schemas.responses import (
+    AgeBracketResponse, 
+    AudioMetadataResponse, 
+    GenderResponse, 
+    SpeechSegmentSchema,
+    SimplifiedAnalyzeResponse,
+    SimplifiedGenderResponse,
+    SimplifiedAgeBracketResponse
+)
+import uuid
 from app.audio.codec import AudioCodec
 from app.audio.preprocessor import AudioPreprocessor
 from app.audio.quality import AudioQualityAssessor
@@ -27,19 +36,7 @@ router = APIRouter()
 logger = get_logger(__name__)
 
 
-@router.post(
-    "/analyze",
-    response_model=AudioMetadataResponse,
-    summary="Analyze audio: normalize, Silero VAD, quality assessment, ML input prep, attribute inference",
-    description=(
-        "Accepts an audio file via multipart upload, validates input constraints, "
-        "decodes and normalizes the payload into 16 kHz, mono, PCM float32 waveform data via FFmpeg, "
-        "runs Silero Voice Activity Detection (VAD) with segment refinement (gap merging & fragment filtering), "
-        "evaluates multi-signal audio quality, prepares deterministic model-ready ML input waveform window, "
-        "and runs attribute inference (gender, age bracket) via the active model pipeline (ensemble or single model)."
-    ),
-)
-async def analyze_audio(
+async def _process_audio(
     request: Request,
     file: UploadFile = File(..., description="Audio file (WAV, MP3, OGG, FLAC, M4A, etc.)"),
 ) -> AudioMetadataResponse:
@@ -189,5 +186,47 @@ async def analyze_audio(
         ),
         model_used=model_used,
         timing_breakdown=timing_breakdown,
+    )
+
+
+@router.post(
+    "/v1/analyze",
+    response_model=AudioMetadataResponse,
+    summary="[v1] Analyze audio: full metadata response",
+    description="V1 legacy endpoint returning the complete audio metadata, VAD segments, and diagnostic information.",
+)
+async def analyze_audio_v1(
+    request: Request,
+    file: UploadFile = File(..., description="Audio file (WAV, MP3, OGG, FLAC, M4A, etc.)"),
+) -> AudioMetadataResponse:
+    """Ingest, process, and return the complete AudioMetadataResponse."""
+    return await _process_audio(request, file)
+
+
+@router.post(
+    "/analyse",
+    response_model=SimplifiedAnalyzeResponse,
+    summary="Analyze audio: simplified response",
+    description="V2 endpoint returning a simplified summary of gender, age bracket, and audio quality.",
+)
+async def analyze_audio(
+    request: Request,
+    file: UploadFile = File(..., description="Audio file (WAV, MP3, OGG, FLAC, M4A, etc.)"),
+) -> SimplifiedAnalyzeResponse:
+    """Ingest, process, and return a simplified AnalyzeResponse."""
+    metadata = await _process_audio(request, file)
+    
+    return SimplifiedAnalyzeResponse(
+        contact_id=str(uuid.uuid4()),
+        gender=SimplifiedGenderResponse(
+            prediction=metadata.gender.prediction,
+            confidence=metadata.gender.confidence
+        ),
+        age_bracket=SimplifiedAgeBracketResponse(
+            prediction=metadata.age_bracket.prediction,
+            confidence=metadata.age_bracket.confidence
+        ),
+        processing_ms=metadata.processing_ms,
+        audio_quality=metadata.audio_quality
     )
 
