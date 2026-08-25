@@ -91,6 +91,15 @@ class GenderClassifier(BaseClassifier):
         if not self._loaded:
             logger.info("Initializing GenderClassifier classification head...", model=self.model_name)
             self._head = GenderNet(embedding_dim=192, hidden_dim=64)
+            
+            from pathlib import Path
+            weights_path = Path("models/custom_heads/gender_head.pt")
+            if weights_path.exists():
+                logger.info(f"Loading trained weights from {weights_path}")
+                self._head.load_state_dict(torch.load(weights_path, map_location="cpu"))
+            else:
+                logger.info("No trained weights found. Using initialized weights.")
+                
             self._head.eval()
             self._loaded = True
             logger.info("GenderClassifier classification head ready")
@@ -126,6 +135,10 @@ class GenderClassifier(BaseClassifier):
 
         if not self._loaded or self._head is None:
             self._head = GenderNet(embedding_dim=192, hidden_dim=64)
+            from pathlib import Path
+            weights_path = Path("models/custom_heads/gender_head.pt")
+            if weights_path.exists():
+                self._head.load_state_dict(torch.load(weights_path, map_location="cpu"))
             self._head.eval()
             self._loaded = True
 
