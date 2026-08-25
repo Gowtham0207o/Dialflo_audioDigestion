@@ -33,26 +33,46 @@ AGE_ENUM_MAP = {
 class AgeNet(nn.Module):
     """Lightweight neural classification head mapping 192-dim speech embeddings to 4 age bracket probabilities."""
 
-    def __init__(self, embedding_dim: int = 192, hidden_dim: int = 64) -> None:
+    def __init__(self, embedding_dim: int = 192, hidden_dim: int = 128) -> None:
         super().__init__()
         self.fc1 = nn.Linear(embedding_dim, hidden_dim)
-        self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(hidden_dim, 4)
+        self.bn1 = nn.BatchNorm1d(hidden_dim)
+        self.relu1 = nn.ReLU()
+        self.dropout1 = nn.Dropout(0.3)
+        
+        self.fc2 = nn.Linear(hidden_dim, 64)
+        self.bn2 = nn.BatchNorm1d(64)
+        self.relu2 = nn.ReLU()
+        self.dropout2 = nn.Dropout(0.3)
+        
+        self.fc3 = nn.Linear(64, 4)
         self.softmax = nn.Softmax(dim=-1)
 
         # Calibrated orthogonal initialization for balanced age bracket mapping
         torch.manual_seed(100)
         nn.init.orthogonal_(self.fc1.weight)
         nn.init.constant_(self.fc1.bias, 0.0)
-        nn.init.xavier_normal_(self.fc2.weight)
+        nn.init.orthogonal_(self.fc2.weight)
         nn.init.constant_(self.fc2.bias, 0.0)
+        nn.init.xavier_normal_(self.fc3.weight)
+        nn.init.constant_(self.fc3.bias, 0.0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass: L2-normalize [N, 192] -> [N, 4] softmax probabilities (18-30, 31-45, 46-60, 60+)."""
         x = nn.functional.normalize(x, p=2, dim=-1)
         x = self.fc1(x)
-        x = self.relu(x)
+        if x.size(0) > 1:
+            x = self.bn1(x)
+        x = self.relu1(x)
+        x = self.dropout1(x)
+        
         x = self.fc2(x)
+        if x.size(0) > 1:
+            x = self.bn2(x)
+        x = self.relu2(x)
+        x = self.dropout2(x)
+        
+        x = self.fc3(x)
         return self.softmax(x)
 
 
@@ -94,7 +114,7 @@ class AgeEstimator(BaseClassifier):
         """Load classification head weights into memory on CPU."""
         if not self._loaded:
             logger.info("Initializing AgeEstimator classification head...", model=self.model_name)
-            self._head = AgeNet(embedding_dim=192, hidden_dim=64)
+            self._head = AgeNet(embedding_dim=192, hidden_dim=128)
             
             from pathlib import Path
             weights_path = Path("models/custom_heads/age_head.pt")
@@ -140,7 +160,7 @@ class AgeEstimator(BaseClassifier):
             )
 
         if not self._loaded or self._head is None:
-            self._head = AgeNet(embedding_dim=192, hidden_dim=64)
+            self._head = AgeNet(embedding_dim=192, hidden_dim=128)
             from pathlib import Path
             weights_path = Path("models/custom_heads/age_head.pt")
             if weights_path.exists():

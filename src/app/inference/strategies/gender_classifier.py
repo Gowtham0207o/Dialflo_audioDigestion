@@ -25,30 +25,45 @@ logger = get_logger(__name__)
 class GenderNet(nn.Module):
     """Lightweight neural classification head mapping 192-dim speech embeddings to male/female probabilities."""
 
-    def __init__(self, embedding_dim: int = 192, hidden_dim: int = 64) -> None:
+    def __init__(self, embedding_dim: int = 192, hidden_dim: int = 128) -> None:
         super().__init__()
         self.fc1 = nn.Linear(embedding_dim, hidden_dim)
         self.bn1 = nn.BatchNorm1d(hidden_dim)
-        self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(0.2)
-        self.fc2 = nn.Linear(hidden_dim, 2)
+        self.relu1 = nn.ReLU()
+        self.dropout1 = nn.Dropout(0.3)
+        
+        self.fc2 = nn.Linear(hidden_dim, 64)
+        self.bn2 = nn.BatchNorm1d(64)
+        self.relu2 = nn.ReLU()
+        self.dropout2 = nn.Dropout(0.3)
+        
+        self.fc3 = nn.Linear(64, 2)
         self.softmax = nn.Softmax(dim=-1)
 
         # Deterministic initialization of acoustic vocal features
         torch.manual_seed(42)
         nn.init.kaiming_normal_(self.fc1.weight)
         nn.init.constant_(self.fc1.bias, 0.0)
-        nn.init.xavier_normal_(self.fc2.weight)
+        nn.init.kaiming_normal_(self.fc2.weight)
         nn.init.constant_(self.fc2.bias, 0.0)
+        nn.init.xavier_normal_(self.fc3.weight)
+        nn.init.constant_(self.fc3.bias, 0.0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass: [N, 192] -> [N, 2] softmax probabilities (0: male, 1: female)."""
         x = self.fc1(x)
         if x.size(0) > 1:
             x = self.bn1(x)
-        x = self.relu(x)
-        x = self.dropout(x)
+        x = self.relu1(x)
+        x = self.dropout1(x)
+        
         x = self.fc2(x)
+        if x.size(0) > 1:
+            x = self.bn2(x)
+        x = self.relu2(x)
+        x = self.dropout2(x)
+        
+        x = self.fc3(x)
         return self.softmax(x)
 
 
@@ -90,7 +105,7 @@ class GenderClassifier(BaseClassifier):
         """Load classification head weights into memory on CPU."""
         if not self._loaded:
             logger.info("Initializing GenderClassifier classification head...", model=self.model_name)
-            self._head = GenderNet(embedding_dim=192, hidden_dim=64)
+            self._head = GenderNet(embedding_dim=192, hidden_dim=128)
             
             from pathlib import Path
             weights_path = Path("models/custom_heads/gender_head.pt")
@@ -134,7 +149,7 @@ class GenderClassifier(BaseClassifier):
             )
 
         if not self._loaded or self._head is None:
-            self._head = GenderNet(embedding_dim=192, hidden_dim=64)
+            self._head = GenderNet(embedding_dim=192, hidden_dim=128)
             from pathlib import Path
             weights_path = Path("models/custom_heads/gender_head.pt")
             if weights_path.exists():

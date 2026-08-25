@@ -13,6 +13,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.model_selection import train_test_split
+from sklearn.utils.class_weight import compute_class_weight
 
 from evaluation.adapter.common_voice import CommonVoiceAdapter
 from app.audio.codec import AudioCodec
@@ -85,9 +86,15 @@ def extract_features(dataset_path: str, limit: int = None):
         
     return torch.tensor(np.array(embeddings), dtype=torch.float32), torch.tensor(gender_labels, dtype=torch.long), torch.tensor(age_labels, dtype=torch.long)
 
-def train_head(model, X_train, y_train, X_val, y_val, model_path: Path, epochs=30, lr=0.001):
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+def train_head(model, X_train, y_train, X_val, y_val, model_path: Path, epochs=50, lr=0.001, class_weights=None):
+    if class_weights is not None:
+        class_weights = torch.tensor(class_weights, dtype=torch.float32)
+        criterion = nn.NLLLoss(weight=class_weights)
+    else:
+        criterion = nn.NLLLoss()
+        
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
     
     train_dataset = TensorDataset(X_train, y_train)
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
@@ -104,18 +111,20 @@ def train_head(model, X_train, y_train, X_val, y_val, model_path: Path, epochs=3
             # Softmax is applied inside the model's forward pass
             # We use NLLLoss with log probabilities
             log_probs = torch.log(outputs + 1e-8)
-            loss = nn.NLLLoss()(log_probs, batch_y)
+            loss = criterion(log_probs, batch_y)
             
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
+            
+        scheduler.step()
             
         # Validation
         model.eval()
         with torch.no_grad():
             val_outputs = model(X_val)
             val_log_probs = torch.log(val_outputs + 1e-8)
-            val_loss = nn.NLLLoss()(val_log_probs, y_val).item()
+            val_loss = criterion(val_log_probs, y_val).item()
             
             preds = torch.argmax(val_outputs, dim=1)
             acc = (preds == y_val).float().mean().item()
@@ -144,15 +153,19 @@ def main():
         X, y_gender, y_age, test_size=0.2, random_state=42
     )
     
+    # Compute Class Weights to handle imbalance
+    gen_weights = compute_class_weight('balanced', classes=np.unique(y_gen_train), y=y_gen_train.numpy())
+    age_weights = compute_class_weight('balanced', classes=np.unique(y_age_train), y=y_age_train.numpy())
+    
     logger.info("--- Training GenderNet ---")
     gender_model = GenderNet(embedding_dim=192)
     gender_path = Path("models/custom_heads/gender_head.pt")
-    train_head(gender_model, X_train, y_gen_train, X_val, y_gen_val, gender_path, epochs=args.epochs)
+    train_head(gender_model, X_train, y_gen_train, X_val, y_gen_val, gender_path, epochs=args.epochs, class_weights=gen_weights)
     
     logger.info("--- Training AgeNet ---")
     age_model = AgeNet(embedding_dim=192)
     age_path = Path("models/custom_heads/age_head.pt")
-    train_head(age_model, X_train, y_age_train, X_val, y_age_val, age_path, epochs=args.epochs)
+    train_head(age_model, X_train, y_age_train, X_val, y_age_val, age_path, epochs=args.epochs, class_weights=age_weights)
     
     logger.info("Training complete!")
 
