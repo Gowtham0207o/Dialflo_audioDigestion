@@ -109,7 +109,10 @@ async def _process_audio(
     attribute_model: AttributeModel = getattr(request.app.state, "attribute_model", None)
     if attribute_model is None:
         # Fallback: create ChunkFormerModel if not set on app.state
-        attribute_model = ChunkFormerModel()
+        attribute_model = ChunkFormerModel(
+            gender_threshold=settings.custom_encoder_gender_threshold,
+            age_threshold=settings.age_confidence_threshold,
+        )
         attribute_model.load()
 
     attr_result = attribute_model.predict(prepared_input)

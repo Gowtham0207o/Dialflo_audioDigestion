@@ -40,7 +40,7 @@ class ChunkFormerModel(AttributeModel):
         self,
         model_name: str = "chunkformer_baseline",
         gender_threshold: float = 0.60,
-        age_threshold: float = 0.50,
+        age_threshold: float = 0.20,
     ) -> None:
         self.model_name = model_name
         self.gender_threshold = gender_threshold

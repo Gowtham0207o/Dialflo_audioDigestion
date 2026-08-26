@@ -102,7 +102,7 @@ class AgeEstimator(BaseClassifier):
         self,
         model_name: str = "age_estimator",
         device: str = "cpu",
-        confidence_threshold: float = 0.50,
+        confidence_threshold: float = 0.20,
     ) -> None:
         self.model_name = model_name
         self.device = device

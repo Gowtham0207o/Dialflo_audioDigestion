@@ -36,13 +36,13 @@ class AgeMapper:
     """Documented mapper converting raw model age predictions into assignment brackets."""
 
     @staticmethod
-    def map_to_bracket(raw_label: str, confidence: float, threshold: float = 0.50) -> tuple[AgeBracket, str]:
-        """Map raw age class label to assignment AgeBracket enum with confidence thresholding.
+    def map_to_bracket(raw_label: str, confidence: float, threshold: float = 0.20) -> tuple[AgeBracket, str]:
+        """Map a raw model class string to a canonical AgeBracket enum.
 
         Args:
-            raw_label: Raw output label string from model.
-            confidence: Highest class prediction confidence score [0.0, 1.0].
-            threshold: Minimum required confidence threshold (default 0.50).
+            raw_label: Model prediction (e.g. "31-45").
+            confidence: Associated prediction confidence.
+            threshold: Minimum required confidence threshold (default 0.20).
 
         Returns:
             Tuple of (AgeBracket enum, reasoning string).

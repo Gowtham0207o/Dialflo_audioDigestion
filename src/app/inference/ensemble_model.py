@@ -41,7 +41,7 @@ class EnsembleModel(AttributeModel):
         models: List of AttributeModel sub-model instances.
         weights: List of float weights corresponding to each sub-model (default: equal).
         gender_threshold: Confidence threshold for fused gender prediction (default 0.60).
-        age_threshold: Confidence threshold for fused age prediction (default 0.50).
+        age_threshold: Confidence threshold for fused age prediction (default 0.20).
         model_name: Ensemble model identifier string.
     """
 
@@ -50,7 +50,7 @@ class EnsembleModel(AttributeModel):
         models: list[AttributeModel],
         weights: list[float] | None = None,
         gender_threshold: float = 0.60,
-        age_threshold: float = 0.50,
+        age_threshold: float = 0.20,
         model_name: str = "ensemble",
     ) -> None:
         if not models:

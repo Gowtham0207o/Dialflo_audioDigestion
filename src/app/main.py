@@ -46,7 +46,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Pre-load ChunkFormer Baseline Model once at startup
     logger.info("Pre-loading ChunkFormer Attribute Model...")
-    chunkformer = ChunkFormerModel()
+    chunkformer = ChunkFormerModel(
+        gender_threshold=settings.custom_encoder_gender_threshold,
+        age_threshold=settings.age_confidence_threshold,
+    )
     chunkformer.load()
     app.state.chunkformer_model = chunkformer
 
