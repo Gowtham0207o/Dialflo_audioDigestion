@@ -210,7 +210,7 @@ flowchart TD
     K -->|Pull Batch chunks| W2
     
     W1 -.->|1. Vectorized VAD| W1
-    W1 -.->|2. Batch Wav2Vec2 (ONNX)| W1
+    W1 -.->|2. Batch Wav2Vec2 ONNX| W1
     
     W1 -->|Publish Result| K
     K -->|Stream Reply| WS1
@@ -233,3 +233,34 @@ The system processes audio entirely in-memory.
 - Audio bytes are never written to disk.
 - The `PrivacyGuard` class explicitly zero-fills audio arrays immediately after inference.
 - No user-identifiable acoustic features are logged or retained.
+
+---
+
+## Appendix: Initial V1 Approach (ECAPA-TDNN)
+
+Before pivoting to the robust Wav2Vec2 transformer, the first iteration of this API was built using a custom-trained ECAPA-TDNN embedding extractor paired with lightweight Chunkformer classification heads. While extremely fast, the evaluation harness revealed critical limitations in handling domain shift and class imbalance.
+
+### V1 Architecture Flow
+
+```mermaid
+flowchart TD
+    A[Audio 16kHz] --> B[Silero VAD]
+    B --> C[MFCC Feature Extraction<br>40-dim / 128-mels]
+    C --> D[ECAPA-TDNN Backbone]
+    
+    D -->|192-dim Embeddings| E[Chunkformer: Gender Head]
+    D -->|192-dim Embeddings| F[Chunkformer: Age Head]
+    
+    E --> G[Gender Logits]
+    F --> H[Age Logits]
+```
+
+### Initial V1 Metrics (ECAPA-TDNN Test Set)
+- **Total Eval Samples**: 950 [MEASURED]
+- **Valid Samples Processed**: 868 [MEASURED]
+- **Gender Accuracy**: 0.749 [MEASURED]
+- **Gender Macro F1 Score**: 0.541 [MEASURED]
+
+### V1 Reviewer Notes & Metric Analysis
+- **Accuracy vs. Macro F1 Discrepancy**: The V1 system reported 75% gender accuracy but only 54% Macro F1. This discrepancy was a direct artifact of severe class imbalance in the evaluation dataset (the Common Voice test subset is heavily male-skewed). Because the ECAPA-TDNN model optimized for global cross-entropy loss during its initial training passes, it naturally biased predictions towards the majority class to minimize overall error. This yielded artificially high global accuracy but penalized minority-class recall, mathematically tanking the unweighted Macro F1 score.
+- **The Pivot**: Rather than spending weeks implementing focal loss, class-weighted sampling, and generating synthetic female/child data to force symmetric representation in the V1 model, the architectural decision was made to upgrade the entire backend to a pre-trained `Wav2Vec2` transformer, which intrinsically solves the demographic representation issues out-of-the-box.
