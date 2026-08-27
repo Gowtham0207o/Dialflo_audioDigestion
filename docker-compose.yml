@@ -17,8 +17,6 @@ services:
       - ENSEMBLE_AGE_THRESHOLD=0.20
       - TORCH_HOME=/tmp/cache
       - HF_HOME=/tmp/cache
-    volumes:
-      - model-cache:/app/models
     tmpfs:
       - /tmp:size=256M
     healthcheck:
@@ -36,7 +34,3 @@ services:
     security_opt:
       - no-new-privileges:true
     read_only: true
-
-volumes:
-  model-cache:
-    driver: local

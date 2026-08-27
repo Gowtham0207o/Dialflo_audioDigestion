@@ -14,12 +14,12 @@ WORKDIR /build
 
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu .
+RUN pip install --default-timeout=100 --no-cache-dir --upgrade pip && \
+    pip install --default-timeout=100 --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu .
 
 # Pre-download model weights so they're baked into the image
 COPY scripts/download_models.py ./scripts/
-RUN python scripts/download_models.py --cache-dir /build/models || true
+RUN python scripts/download_models.py --cache-dir /build/models
 
 # ─────────────────────────────────────────────
 # Stage 2: Runtime — slim production image

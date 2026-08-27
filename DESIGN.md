@@ -8,14 +8,7 @@ composable stages: validation → codec transcoding → noise reduction → feat
 
 **Model choices:**
 
-- **Gender classification**: SpeechBrain's ECAPA-TDNN speaker embeddings
-  (`spkrec-ecapa-voxceleb`) produce 192-dimensional embeddings that are inherently
-  gender-discriminative. A lightweight linear head classifies gender with sub-100ms
-  inference on CPU. Chosen over end-to-end Whisper because we need speaker attributes,
-  not transcription.
-
-- **Age estimation**: wav2vec2 fine-tuned embeddings capture prosodic features (pitch,
-  jitter, shimmer) that correlate with age. A classification head maps to four brackets.
+- **Attribute Inference**: We use a fine-tuned Wav2Vec2 model (`audeering/wav2vec2-large-robust-24-ft-age-gender`) to predict both age and gender simultaneously. Wav2Vec2 captures deep prosodic and acoustic features that strongly correlate with demographics. By using a single, unified transformer architecture for both tasks, we ensure highly accurate and intrinsically correlated predictions compared to disjoint linear classification heads. This avoids fabricating custom heads and relies on a proven, robust foundation for audio analysis.
 
 - **Audio quality**: SNR estimation via signal/noise energy ratio combined with Voice
   Activity Detection (VAD) ratio. Pure signal processing — no ML overhead.

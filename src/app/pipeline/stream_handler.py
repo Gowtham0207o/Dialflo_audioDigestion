@@ -36,8 +36,9 @@ class StreamingAnalyzer:
         self._chunk_index = 0
         self._cumulative_duration_ms = 0
 
-        self._gender_classifier = GenderClassifier()
-        self._age_estimator = AgeEstimator()
+        from app.inference.wav2vec2_model import Wav2Vec2AttributeModel
+        self._attribute_model = Wav2Vec2AttributeModel()
+        self._attribute_model.load()
         self._quality_assessor = QualityAssessor()
 
     async def process_chunk(self, chunk_bytes: bytes) -> StreamEvent | None:
@@ -65,19 +66,24 @@ class StreamingAnalyzer:
         qual_res = await self._quality_assessor.predict(full_waveform, 16000)
         audio_quality = qual_res["quality"]
 
-        gender_res = await self._gender_classifier.predict(full_waveform, 16000)
-        age_res = await self._age_estimator.predict(full_waveform, 16000)
+        from app.audio.preprocessor import PreparedMLInput
+        prepared_input = PreparedMLInput(
+            is_prepared_valid=True,
+            audio_array=full_waveform,
+            preparation_reasoning="stream_chunk"
+        )
+        attr_result = self._attribute_model.predict(prepared_input)
 
         return StreamEvent(
             chunk_index=self._chunk_index,
             is_final=False,
             gender=GenderResponse(
-                prediction=gender_res["prediction"],
-                confidence=round(gender_res["confidence"], 4),
+                prediction=attr_result.gender,
+                confidence=round(attr_result.gender_confidence, 4),
             ),
             age_bracket=AgeBracketResponse(
-                prediction=age_res["prediction"],
-                confidence=round(age_res["confidence"], 4),
+                prediction=attr_result.age_bracket,
+                confidence=round(attr_result.age_confidence, 4),
             ),
             audio_quality=audio_quality,
             cumulative_duration_ms=self._cumulative_duration_ms,
@@ -102,19 +108,25 @@ class StreamingAnalyzer:
         full_waveform = np.concatenate(self._audio_buffers)
 
         qual_res = await self._quality_assessor.predict(full_waveform, 16000)
-        gender_res = await self._gender_classifier.predict(full_waveform, 16000)
-        age_res = await self._age_estimator.predict(full_waveform, 16000)
+        
+        from app.audio.preprocessor import PreparedMLInput
+        prepared_input = PreparedMLInput(
+            is_prepared_valid=True,
+            audio_array=full_waveform,
+            preparation_reasoning="stream_final"
+        )
+        attr_result = self._attribute_model.predict(prepared_input)
 
         return StreamEvent(
             chunk_index=self._chunk_index,
             is_final=True,
             gender=GenderResponse(
-                prediction=gender_res["prediction"],
-                confidence=round(gender_res["confidence"], 4),
+                prediction=attr_result.gender,
+                confidence=round(attr_result.gender_confidence, 4),
             ),
             age_bracket=AgeBracketResponse(
-                prediction=age_res["prediction"],
-                confidence=round(age_res["confidence"], 4),
+                prediction=attr_result.age_bracket,
+                confidence=round(attr_result.age_confidence, 4),
             ),
             audio_quality=qual_res["quality"],
             cumulative_duration_ms=self._cumulative_duration_ms,

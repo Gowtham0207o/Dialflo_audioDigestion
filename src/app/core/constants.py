@@ -65,8 +65,8 @@ VAD_MIN_SPEECH_RATIO: float = 0.3
 DEFAULT_INFERENCE_TIMEOUT_S: float = 5.0
 """Maximum time to wait for a single model inference."""
 
-EMBEDDING_DIM: int = 192
-"""Expected dimension of ECAPA-TDNN speaker embeddings."""
+EMBEDDING_DIM: int = 1024
+"""Expected hidden dimension of Wav2Vec2 representations."""
 
 # ── WebSocket Streaming ────────────────────
 WS_CHUNK_SIZE_BYTES: int = 32_000
