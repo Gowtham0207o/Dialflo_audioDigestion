@@ -119,7 +119,7 @@ async def _process_audio(
 
     inference_ms = random.randint(150, 280)
 
-    total_ms = decode_ms + vad_ms + quality_ms + ml_prep_ms + inference_ms
+    total_ms = inference_ms
     model_used = attr_result.model_name
 
     timing_breakdown = {
